@@ -1,13 +1,37 @@
-# requirements.txt
+# Core data science packages
 pandas>=1.5.0
 numpy>=1.21.0
-requests>=2.28.0
-fredapi>=0.5.0
-yfinance>=0.2.0
+scipy>=1.8.0
 matplotlib>=3.5.0
 seaborn>=0.11.0
-scipy>=1.8.0
+
+# Machine learning and econometrics
+scikit-learn>=1.1.0
 statsmodels>=0.13.0
-jupyter>=1.0.0
+
+# Data collection APIs
+fredapi>=0.5.0
+yfinance>=0.2.0
+requests>=2.28.0
+
+# Data processing and file handling
 openpyxl>=3.0.0
 lxml>=4.6.0
+python-dotenv>=0.19.0
+
+# Development and analysis tools
+jupyter>=1.0.0
+ipykernel>=6.0.0
+notebook>=6.4.0
+
+# Optional: Enhanced visualization
+plotly>=5.0.0
+bokeh>=2.4.0
+
+# Testing and quality assurance
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Documentation
+sphinx>=4.0.0
+sphinx-rtd-theme>=1.0.0

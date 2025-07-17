@@ -1338,7 +1338,6 @@ if __name__ == "__main__":
         
         print(f"\n📁 All data saved in: {Config.DATA_DIR}")
         print(f"📋 Check logs/data_collection.log for detailed information")
-        print(f"🚀 Ready to run analysis notebook!")
         
     except KeyboardInterrupt:
         print("\n\n❌ Data collection interrupted by user")
