@@ -392,129 +392,113 @@ def create_hypothesis1_visualizations(data, results):
     """Create visualizations for Hypothesis 1 results"""
     logging.info("Creating Hypothesis 1 visualizations...")
     
+    output_dir = 'results/hypothesis1'
+    os.makedirs(output_dir, exist_ok=True)
+    
     plt.style.use('default')
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle('Hypothesis 1: Threshold Effects on Long-Term Yields', fontsize=16, fontweight='bold')
     
     # Plot 1: QE Intensity vs Yield Changes (scatter)
-    ax1 = axes[0, 0]
+    fig1, ax1 = plt.subplots(figsize=(10, 8))
     ax1.scatter(data['us_qe_intensity'], data['yield_change'], alpha=0.5, s=20)
-    
-    # Add threshold line if STR was successful
     if 'str_results' in results and 'threshold' in results['str_results']:
         threshold = results['str_results']['threshold']
         ax1.axvline(x=threshold, color='red', linestyle='--', linewidth=2, 
                    label=f'STR Threshold: {threshold:.3f}')
         ax1.legend()
-    
     ax1.set_xlabel('QE Intensity')
     ax1.set_ylabel('Yield Change (bps)')
-    ax1.set_title('QE Intensity vs Yield Changes')
+    ax1.set_title('Hypothesis 1: QE Intensity vs Yield Changes')
     ax1.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h1_qe_intensity_vs_yield_changes.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig1)
     
     # Plot 2: Time series of QE intensity and yields
-    ax2 = axes[0, 1]
+    fig2, ax2 = plt.subplots(figsize=(10, 8))
     ax2_twin = ax2.twinx()
-    
     ax2.plot(data.index, data['us_qe_intensity'], color='blue', alpha=0.7, label='QE Intensity')
     ax2_twin.plot(data.index, data['us_10y'], color='red', alpha=0.7, label='10Y Yield')
-    
-    # Highlight threshold crossings
     if 'str_results' in results and 'threshold' in results['str_results']:
         threshold = results['str_results']['threshold']
         above_threshold = data['us_qe_intensity'] > threshold
         ax2.fill_between(data.index, 0, 1, where=above_threshold, alpha=0.2, color='red', 
                         transform=ax2.get_xaxis_transform(), label='Above Threshold')
-    
     ax2.set_ylabel('QE Intensity', color='blue')
     ax2_twin.set_ylabel('10Y Yield (%)', color='red')
-    ax2.set_title('QE Intensity and Yields Over Time')
+    ax2.set_title('Hypothesis 1: QE Intensity and Yields Over Time')
     ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h1_qe_intensity_and_yields_time_series.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig2)
     
     # Plot 3: Regime comparison (if analysis available)
-    ax3 = axes[1, 0]
+    fig3, ax3 = plt.subplots(figsize=(10, 8))
     if 'mechanism_analysis' in results and 'low_qe' in results['mechanism_analysis']:
         regime_data = results['mechanism_analysis']
-        
         regimes = ['low_qe', 'high_qe']
         yield_changes = [regime_data[r]['mean_yield_change'] for r in regimes if r in regime_data]
         yield_vols = [regime_data[r]['yield_volatility'] for r in regimes if r in regime_data]
-        
         x = np.arange(len(regimes))
         width = 0.35
-        
         ax3.bar(x - width/2, yield_changes, width, label='Mean Yield Change', alpha=0.7)
         ax3.bar(x + width/2, yield_vols, width, label='Yield Volatility', alpha=0.7)
-        
         ax3.set_xlabel('QE Regime')
         ax3.set_ylabel('Basis Points')
-        ax3.set_title('Yield Behavior by QE Regime')
+        ax3.set_title('Hypothesis 1: Yield Behavior by QE Regime')
         ax3.set_xticks(x)
         ax3.set_xticklabels(['Low QE', 'High QE'])
         ax3.legend()
         ax3.grid(True, alpha=0.3)
+    else:
+        ax3.text(0.5, 0.5, "Regime comparison analysis not available", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax3.transAxes, fontsize=12, color='gray')
+        ax3.set_title('Hypothesis 1: Yield Behavior by QE Regime')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h1_yield_behavior_by_regime.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig3)
     
     # Plot 4: Model fit (if STR results available)
-    ax4 = axes[1, 1]
+    fig4, ax4 = plt.subplots(figsize=(10, 8))
     if 'str_results' in results and 'fitted_values' in results['str_results']:
         actual = data['yield_change'].dropna()
         fitted = results['str_results']['fitted_values']
-        
-        # Align lengths
         min_len = min(len(actual), len(fitted))
         actual = actual.iloc[:min_len]
         fitted = fitted[:min_len]
-        
         ax4.scatter(fitted, actual, alpha=0.5, s=20)
-        
-        # Add 45-degree line
         min_val = min(actual.min(), fitted.min())
         max_val = max(actual.max(), fitted.max())
         ax4.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8)
-        
-        # Add R-squared
         r_squared = results['str_results'].get('r_squared', 0)
         ax4.text(0.05, 0.95, f'R² = {r_squared:.3f}', transform=ax4.transAxes, 
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-    
     ax4.set_xlabel('Fitted Values')
     ax4.set_ylabel('Actual Values')
-    ax4.set_title('Model Fit: Actual vs Fitted')
+    ax4.set_title('Hypothesis 1: Model Fit - Actual vs Fitted')
     ax4.grid(True, alpha=0.3)
-    
     plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h1_model_fit_actual_vs_fitted.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig4)
     
-    # Save plot
-    os.makedirs('results', exist_ok=True)
-    plt.savefig('results/hypothesis1_analysis.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    # Create additional scatter plot with model predictions
+    # Additional scatter plot with model predictions (if STR results available)
     if 'str_results' in results and 'threshold' in results['str_results']:
-        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
-        
-        # Create smooth QE intensity range for prediction
+        fig5, ax5 = plt.subplots(figsize=(10, 8))
         qe_range = np.linspace(data['us_qe_intensity'].min(), data['us_qe_intensity'].max(), 100)
-        
-        # Create dummy control variables for prediction
         if 'str_results' in results and hasattr(results['str_results'], 'fitted_values'):
-            # Plot actual data points
-            ax.scatter(data['us_qe_intensity'], data['yield_change'], alpha=0.4, s=30, 
+            ax5.scatter(data['us_qe_intensity'], data['yield_change'], alpha=0.4, s=30, 
                       color='blue', label='Actual Data')
-            
-            # Add threshold line
             threshold = results['str_results']['threshold']
-            ax.axvline(x=threshold, color='red', linestyle='--', linewidth=2, 
+            ax5.axvline(x=threshold, color='red', linestyle='--', linewidth=2, 
                       label=f'Threshold: {threshold:.3f}')
-            
-            ax.set_xlabel('QE Intensity')
-            ax.set_ylabel('Yield Change (basis points)')
-            ax.set_title('Threshold Model: QE Intensity vs Yield Response')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            
-            plt.savefig('results/hypothesis1_threshold_detail.png', dpi=300, bbox_inches='tight')
-            plt.close()
+            ax5.set_xlabel('QE Intensity')
+            ax5.set_ylabel('Yield Change (basis points)')
+            ax5.set_title('Hypothesis 1: Threshold Model - QE Intensity vs Yield Response')
+            ax5.legend()
+            ax5.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, 'h1_threshold_model_qe_intensity_vs_yield_response.png'), dpi=300, bbox_inches='tight')
+            plt.close(fig5)
 
 def test_hypothesis_1(data):
     """Main function to test Hypothesis 1"""

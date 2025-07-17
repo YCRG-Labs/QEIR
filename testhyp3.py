@@ -607,113 +607,134 @@ def create_hypothesis3_visualizations(data, results):
     """Create visualizations for Hypothesis 3 results"""
     logging.info("Creating Hypothesis 3 visualizations...")
     
+    output_dir = 'results/hypothesis3'
+    os.makedirs(output_dir, exist_ok=True)
+    
     plt.style.use('default')
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle('Hypothesis 3: International Spillover Effects', fontsize=16, fontweight='bold')
     
     # Plot 1: Foreign holdings vs QE intensity
-    ax1 = axes[0, 0]
+    fig1, ax1 = plt.subplots(figsize=(10, 8))
     if 'foreign_treasury_holdings' in data.columns:
-        # Normalize for better visualization
         qe_norm = (data['us_qe_intensity'] - data['us_qe_intensity'].min()) / (data['us_qe_intensity'].max() - data['us_qe_intensity'].min())
         foreign_norm = (data['foreign_treasury_holdings'] - data['foreign_treasury_holdings'].min()) / (data['foreign_treasury_holdings'].max() - data['foreign_treasury_holdings'].min())
-        
         ax1.plot(data.index, qe_norm, label='QE Intensity (normalized)', alpha=0.7)
         ax1.plot(data.index, foreign_norm, label='Foreign Holdings (normalized)', alpha=0.7)
         ax1.set_ylabel('Normalized Values')
-        ax1.set_title('QE Intensity vs Foreign Treasury Holdings')
+        ax1.set_title('Hypothesis 3: QE Intensity vs Foreign Treasury Holdings')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
+    else:
+        ax1.text(0.5, 0.5, "Foreign treasury holdings data not available", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax1.transAxes, fontsize=12, color='gray')
+        ax1.set_title('Hypothesis 3: QE Intensity vs Foreign Treasury Holdings')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h3_qe_intensity_vs_foreign_holdings.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig1)
     
     # Plot 2: Exchange rate effects
-    ax2 = axes[0, 1]
+    fig2, ax2 = plt.subplots(figsize=(10, 8))
     if 'fx_effects' in results and results['fx_effects']:
         fx_results = results['fx_effects']
-        
-        # Plot QE coefficients for different currencies
         currencies = []
         coefficients = []
         interpretations = []
-        
         for fx_var, fx_data in fx_results.items():
             if isinstance(fx_data, dict) and 'qe_coefficient' in fx_data:
                 currencies.append(fx_var.upper().replace('_', '/'))
                 coefficients.append(fx_data['qe_coefficient'])
                 interpretations.append(fx_data.get('result_interpretation', 'unknown'))
-        
         if currencies:
             colors = ['green' if interp == 'weakening' else 'red' for interp in interpretations]
             bars = ax2.bar(currencies, coefficients, color=colors, alpha=0.7)
             ax2.axhline(y=0, color='black', linestyle='-', alpha=0.5)
             ax2.set_ylabel('QE Coefficient')
-            ax2.set_title('QE Effects on Exchange Rates')
+            ax2.set_title('Hypothesis 3: QE Effects on Exchange Rates')
             ax2.tick_params(axis='x', rotation=45)
-            
-            # Add interpretation legend
             from matplotlib.patches import Patch
             legend_elements = [Patch(facecolor='green', alpha=0.7, label='Dollar Weakening'),
                              Patch(facecolor='red', alpha=0.7, label='Dollar Strengthening')]
             ax2.legend(handles=legend_elements)
-    
+        else:
+            ax2.text(0.5, 0.5, "No exchange rate effects data available", 
+                     horizontalalignment='center', verticalalignment='center', 
+                     transform=ax2.transAxes, fontsize=12, color='gray')
+            ax2.set_title('Hypothesis 3: QE Effects on Exchange Rates')
+    else:
+        ax2.text(0.5, 0.5, "No exchange rate effects data available", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax2.transAxes, fontsize=12, color='gray')
+        ax2.set_title('Hypothesis 3: QE Effects on Exchange Rates')
     ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h3_qe_effects_on_exchange_rates.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig2)
     
     # Plot 3: Foreign flow responses by country/type
-    ax3 = axes[1, 0]
-    if 'official_vs_private' in results and results['official_vs_private']:
+    fig3, ax3 = plt.subplots(figsize=(10, 8))
+    if 'official_vs_private' in results and results['official_vs_private'] and 'error' not in results['official_vs_private']:
         flow_results = results['official_vs_private']
-        
         countries = []
         responses = []
-        
         for country, country_data in flow_results.items():
             if isinstance(country_data, dict) and 'qe_coefficient' in country_data:
                 countries.append(country)
                 responses.append(country_data['qe_coefficient'])
-        
         if countries:
             colors = ['blue' if country in ['China', 'Japan'] else 'orange' for country in countries]
             bars = ax3.bar(countries, responses, color=colors, alpha=0.7)
             ax3.axhline(y=0, color='black', linestyle='-', alpha=0.5)
             ax3.set_ylabel('QE Response Coefficient')
-            ax3.set_title('Foreign Flow Responses by Investor Type')
-            
-            # Add legend
+            ax3.set_title('Hypothesis 3: Foreign Flow Responses by Investor Type')
             from matplotlib.patches import Patch
             legend_elements = [Patch(facecolor='blue', alpha=0.7, label='Official Investors'),
                              Patch(facecolor='orange', alpha=0.7, label='Private Investors')]
             ax3.legend(handles=legend_elements)
-    
+        else:
+            ax3.text(0.5, 0.5, "No significant flow responses found", 
+                     horizontalalignment='center', verticalalignment='center', 
+                     transform=ax3.transAxes, fontsize=10, color='gray')
+            ax3.set_title('Hypothesis 3: Foreign Flow Responses by Investor Type')
+    else:
+        ax3.text(0.5, 0.5, "Data for official vs private flows not available", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax3.transAxes, fontsize=10, color='gray')
+        ax3.set_title('Hypothesis 3: Foreign Flow Responses by Investor Type')
     ax3.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h3_foreign_flow_responses_by_investor_type.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig3)
     
     # Plot 4: High-frequency event responses
-    ax4 = axes[1, 1]
+    fig4, ax4 = plt.subplots(figsize=(10, 8))
     if 'high_frequency' in results and 'event_data' in results['high_frequency']:
         event_data = pd.DataFrame(results['high_frequency']['event_data'])
-        
         if not event_data.empty and 'qe_surprise' in event_data.columns:
-            # Plot yield response to QE surprises
             if 'yield_response' in event_data.columns:
                 ax4.scatter(event_data['qe_surprise'], event_data['yield_response'], 
                            alpha=0.7, s=100, label='Yield Response')
-                
-                # Add trend line
                 if len(event_data) > 1:
                     z = np.polyfit(event_data['qe_surprise'], event_data['yield_response'], 1)
                     p = np.poly1d(z)
                     x_trend = np.linspace(event_data['qe_surprise'].min(), event_data['qe_surprise'].max(), 100)
                     ax4.plot(x_trend, p(x_trend), "r--", alpha=0.8)
-            
             ax4.set_xlabel('QE Surprise')
             ax4.set_ylabel('Market Response')
-            ax4.set_title('High-Frequency Response to QE Announcements')
+            ax4.set_title('Hypothesis 3: High-Frequency Response to QE Announcements')
             ax4.grid(True, alpha=0.3)
-    
+        else:
+            ax4.text(0.5, 0.5, "No high-frequency event data available", 
+                     horizontalalignment='center', verticalalignment='center', 
+                     transform=ax4.transAxes, fontsize=12, color='gray')
+            ax4.set_title('Hypothesis 3: High-Frequency Response to QE Announcements')
+    else:
+        ax4.text(0.5, 0.5, "No high-frequency event data available", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax4.transAxes, fontsize=12, color='gray')
+        ax4.set_title('Hypothesis 3: High-Frequency Response to QE Announcements')
     plt.tight_layout()
-    
-    # Save plot
-    os.makedirs('results', exist_ok=True)
-    plt.savefig('results/hypothesis3_analysis.png', dpi=300, bbox_inches='tight')
-    plt.close()
+    plt.savefig(os.path.join(output_dir, 'h3_high_frequency_response_to_qe_announcements.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig4)
 
 def test_hypothesis_3(data):
     """Main function to test Hypothesis 3"""

@@ -482,32 +482,38 @@ def create_hypothesis2_visualizations(data, results):
     """Create visualizations for Hypothesis 2 results"""
     logging.info("Creating Hypothesis 2 visualizations...")
     
+    output_dir = 'results/hypothesis2'
+    os.makedirs(output_dir, exist_ok=True)
+    
     plt.style.use('default')
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle('Hypothesis 2: QE Impact on Long-Term Private Investment', fontsize=16, fontweight='bold')
     
     # Plot 1: Investment vs QE Intensity
-    ax1 = axes[0, 0]
-    ax1.scatter(data['qe_intensity'], data['investment'], alpha=0.6, s=30)
-    
-    # Add trend line
-    if len(data.dropna()) > 10:
+    fig1, ax1 = plt.subplots(figsize=(10, 8))
+    if not data[['qe_intensity', 'investment']].dropna().empty:
+        ax1.scatter(data['qe_intensity'], data['investment'], alpha=0.6, s=30)
         valid_data = data[['qe_intensity', 'investment']].dropna()
-        z = np.polyfit(valid_data['qe_intensity'], valid_data['investment'], 1)
-        p = np.poly1d(z)
-        x_trend = np.linspace(valid_data['qe_intensity'].min(), valid_data['qe_intensity'].max(), 100)
-        ax1.plot(x_trend, p(x_trend), "r--", alpha=0.8, linewidth=2)
-    
-    ax1.set_xlabel('QE Intensity')
-    ax1.set_ylabel('Investment Level')
-    ax1.set_title('QE Intensity vs Investment')
-    ax1.grid(True, alpha=0.3)
+        if len(valid_data) > 10:
+            z = np.polyfit(valid_data['qe_intensity'], valid_data['investment'], 1)
+            p = np.poly1d(z)
+            x_trend = np.linspace(valid_data['qe_intensity'].min(), valid_data['qe_intensity'].max(), 100)
+            ax1.plot(x_trend, p(x_trend), "r--", alpha=0.8, linewidth=2)
+        ax1.set_xlabel('QE Intensity')
+        ax1.set_ylabel('Investment Level')
+        ax1.set_title('Hypothesis 2: QE Intensity vs Investment')
+        ax1.grid(True, alpha=0.3)
+    else:
+        ax1.text(0.5, 0.5, "No data available for QE Intensity vs Investment", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax1.transAxes, fontsize=12, color='gray')
+        ax1.set_title('Hypothesis 2: QE Intensity vs Investment')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h2_qe_intensity_vs_investment.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig1)
     
     # Plot 2: Two channels effects
-    ax2 = axes[0, 1]
+    fig2, ax2 = plt.subplots(figsize=(10, 8))
     if 'channel_analysis' in results and 'interest_rate_channel' in results['channel_analysis']:
         channels = results['channel_analysis']
-        
         channel_names = ['Interest Rate\nChannel', 'Distortion\nChannel']
         effects = [
             channels['interest_rate_channel']['mean_effect'],
@@ -517,64 +523,84 @@ def create_hypothesis2_visualizations(data, results):
             channels['interest_rate_channel']['contribution_pct'],
             channels['distortion_channel']['contribution_pct']
         ]
-        
-        bars = ax2.bar(channel_names, effects, alpha=0.7, color=['blue', 'red'])
-        ax2.set_ylabel('Mean Effect on Investment')
-        ax2.set_title('Investment Channels Decomposition')
-        ax2.grid(True, alpha=0.3)
-        
-        # Add contribution percentages
-        for bar, contrib in zip(bars, contributions):
-            height = bar.get_height()
-            ax2.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{contrib:.1f}%', ha='center', va='bottom')
+        if all(not np.isnan(e) for e in effects):
+            bars = ax2.bar(channel_names, effects, alpha=0.7, color=['blue', 'red'])
+            ax2.set_ylabel('Mean Effect on Investment')
+            ax2.set_title('Hypothesis 2: Investment Channels Decomposition')
+            ax2.grid(True, alpha=0.3)
+            for bar, contrib in zip(bars, contributions):
+                height = bar.get_height()
+                ax2.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{contrib:.1f}%', ha='center', va='bottom')
+        else:
+            ax2.text(0.5, 0.5, "Channel analysis data not available or contains NaN", 
+                     horizontalalignment='center', verticalalignment='center', 
+                     transform=ax2.transAxes, fontsize=12, color='gray')
+            ax2.set_title('Hypothesis 2: Investment Channels Decomposition')
+    else:
+        ax2.text(0.5, 0.5, "Channel analysis results not available", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax2.transAxes, fontsize=12, color='gray')
+        ax2.set_title('Hypothesis 2: Investment Channels Decomposition')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h2_investment_channels_decomposition.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig2)
     
     # Plot 3: Time series of investment and QE
-    ax3 = axes[1, 0]
-    ax3_twin = ax3.twinx()
+    fig3, ax3 = plt.subplots(figsize=(10, 8))
+    if not data[['investment', 'qe_intensity']].dropna().empty:
+        ax3_twin = ax3.twinx()
+        ax3.plot(data.index, data['investment'], color='green', alpha=0.7, label='Investment')
+        ax3_twin.plot(data.index, data['qe_intensity'], color='orange', alpha=0.7, label='QE Intensity')
+        ax3.set_ylabel('Investment Level', color='green')
+        ax3_twin.set_ylabel('QE Intensity', color='orange')
+        ax3.set_title('Hypothesis 2: Investment and QE Over Time')
+        ax3.grid(True, alpha=0.3)
+    else:
+        ax3.text(0.5, 0.5, "No data available for Investment and QE Over Time", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax3.transAxes, fontsize=12, color='gray')
+        ax3.set_title('Hypothesis 2: Investment and QE Over Time')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'h2_investment_and_qe_time_series.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig3)
     
-    ax3.plot(data.index, data['investment'], color='green', alpha=0.7, label='Investment')
-    ax3_twin.plot(data.index, data['qe_intensity'], color='orange', alpha=0.7, label='QE Intensity')
-    
-    ax3.set_ylabel('Investment Level', color='green')
-    ax3_twin.set_ylabel('QE Intensity', color='orange')
-    ax3.set_title('Investment and QE Over Time')
-    ax3.grid(True, alpha=0.3)
-    
-    # Plot 4: Impulse responses (if available)
-    ax4 = axes[1, 1]
-    if 'local_projections' in results and 'impulse_responses' in results['local_projections']:
+    # Plot 4: Impulse responses (if available) or Residuals vs Fitted
+    fig4, ax4 = plt.subplots(figsize=(10, 8))
+    if 'local_projections' in results and 'impulse_responses' in results['local_projections'] and not pd.DataFrame(results['local_projections']['impulse_responses']).empty:
         ir_data = pd.DataFrame(results['local_projections']['impulse_responses'])
-        
         ax4.plot(ir_data['horizon'], ir_data['coefficient'], 'b-', linewidth=2, label='Point Estimate')
         ax4.fill_between(ir_data['horizon'], ir_data['lower_ci'], ir_data['upper_ci'], 
                         alpha=0.3, color='blue', label='95% CI')
         ax4.axhline(y=0, color='black', linestyle='-', alpha=0.5)
-        
         ax4.set_xlabel('Quarters Ahead')
         ax4.set_ylabel('Investment Response')
-        ax4.set_title('Dynamic Response to QE Shock')
+        ax4.set_title('Hypothesis 2: Dynamic Response to QE Shock')
         ax4.legend()
         ax4.grid(True, alpha=0.3)
-    else:
-        # Plot residuals vs fitted if IV results available
-        if 'iv_results' in results and 'fitted_values' in results['iv_results']:
-            fitted = results['iv_results']['fitted_values']
-            residuals = results['iv_results']['residuals']
-            
+    elif 'iv_results' in results and 'fitted_values' in results['iv_results'] and 'residuals' in results['iv_results']:
+        fitted = results['iv_results']['fitted_values']
+        residuals = results['iv_results']['residuals']
+        if not (fitted.empty or residuals.empty):
             ax4.scatter(fitted, residuals, alpha=0.6, s=30)
             ax4.axhline(y=0, color='red', linestyle='--', alpha=0.8)
             ax4.set_xlabel('Fitted Values')
             ax4.set_ylabel('Residuals')
-            ax4.set_title('Residuals vs Fitted (IV Model)')
+            ax4.set_title('Hypothesis 2: Residuals vs Fitted (IV Model)')
             ax4.grid(True, alpha=0.3)
-    
+        else:
+            ax4.text(0.5, 0.5, "No data available for Residuals vs Fitted (IV Model)", 
+                     horizontalalignment='center', verticalalignment='center', 
+                     transform=ax4.transAxes, fontsize=12, color='gray')
+            ax4.set_title('Hypothesis 2: Residuals vs Fitted (IV Model)')
+    else:
+        ax4.text(0.5, 0.5, "No impulse response or IV model data available", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=ax4.transAxes, fontsize=12, color='gray')
+        ax4.set_title('Hypothesis 2: Dynamic Response / Residuals')
     plt.tight_layout()
-    
-    # Save plot
-    os.makedirs('results', exist_ok=True)
-    plt.savefig('results/hypothesis2_analysis.png', dpi=300, bbox_inches='tight')
-    plt.close()
+    plt.savefig(os.path.join(output_dir, 'h2_dynamic_response_or_residuals.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig4)
 
 def test_hypothesis_2(data):
     """Main function to test Hypothesis 2"""

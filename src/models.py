@@ -40,7 +40,14 @@ class SmoothTransitionRegression:
                 return 1e10
                 
             G = self.transition_function(qe_intensity, gamma, c)
-            X_reg = np.column_stack([np.ones(len(x)), x, x * G])
+            
+            # Reshape G to enable broadcasting
+            G_reshaped = G[:, np.newaxis]
+            
+            # Apply transition to all regressors
+            X_transition = x * G_reshaped
+            
+            X_reg = np.column_stack([np.ones(len(x)), x, X_transition])
             
             try:
                 beta = np.linalg.lstsq(X_reg, y, rcond=None)[0]
