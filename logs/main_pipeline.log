@@ -578,3 +578,257 @@ KEY FINDINGS:
 POLICY IMPLICATIONS:
 2025-07-17 16:03:08,694 - INFO - • QE effectiveness has clear limits - policymakers should avoid excessive intervention
 2025-07-17 16:03:08,694 - INFO - • QE may have unintended consequences for long-term private investment
+2025-07-17 16:13:44,485 - INFO - ============================================================
+2025-07-17 16:13:44,485 - INFO - QUANTITATIVE EASING AND BOND MARKET DYNAMICS
+2025-07-17 16:13:44,485 - INFO - Main Analysis Pipeline
+2025-07-17 16:13:44,485 - INFO - ============================================================
+2025-07-17 16:13:44,485 - INFO - 
+1. DOWNLOADING DATA
+2025-07-17 16:13:44,485 - INFO - ------------------------------
+2025-07-17 16:13:44,485 - INFO - Using existing processed data. Delete data/processed to re-download.
+2025-07-17 16:13:44,485 - INFO - 
+2. LOADING AND PREPARING DATA
+2025-07-17 16:13:44,486 - INFO - ------------------------------
+2025-07-17 16:13:44,571 - INFO - Loaded us_panel: (35260, 33)
+2025-07-17 16:13:44,715 - INFO - Loaded combined_panel: (35260, 80)
+2025-07-17 16:13:44,755 - INFO - Loaded market_panel: (9129, 46)
+2025-07-17 16:13:44,756 - INFO - Preparing data for analysis...
+2025-07-17 16:13:44,810 - INFO - Data quality score: 45/100
+2025-07-17 16:13:44,872 - INFO - Analysis dataset prepared: (13693, 84)
+2025-07-17 16:13:44,873 - INFO - Date range: 1986-01-08 00:00:00 to 2025-01-06 00:00:00
+2025-07-17 16:13:44,873 - INFO - 
+3. RUNNING HYPOTHESIS TESTS
+2025-07-17 16:13:44,874 - INFO - ------------------------------
+2025-07-17 16:13:44,874 - INFO - ==================================================
+2025-07-17 16:13:44,874 - INFO - RUNNING HYPOTHESIS TESTS
+2025-07-17 16:13:44,874 - INFO - ==================================================
+2025-07-17 16:13:44,874 - INFO - 
+--- Testing Hypothesis 1: Threshold Effects ---
+2025-07-17 16:13:44,874 - INFO - ==================================================
+2025-07-17 16:13:44,874 - INFO - TESTING HYPOTHESIS 1: THRESHOLD EFFECTS ON YIELDS
+2025-07-17 16:13:44,874 - INFO - ==================================================
+2025-07-17 16:13:44,878 - INFO - Hypothesis 1 dataset prepared: (13692, 14)
+2025-07-17 16:13:44,878 - INFO - QE intensity range: 0.000 to 0.067
+2025-07-17 16:13:44,878 - INFO - Running Smooth Transition Regression (STR) analysis...
+2025-07-17 16:13:44,880 - INFO - Running Hansen threshold regression analysis...
+2025-07-17 16:13:50,799 - INFO - Hansen Results: Threshold = 0.003
+2025-07-17 16:13:50,799 - INFO - Regime 1: 8568 obs, Regime 2: 5124 obs, R² = 0.001
+2025-07-17 16:13:50,799 - INFO - Analyzing threshold mechanisms...
+2025-07-17 16:13:50,799 - INFO - Creating Hypothesis 1 visualizations...
+2025-07-17 16:13:51,943 - INFO - Hypothesis 1 supported: True
+2025-07-17 16:13:51,943 - INFO - STR threshold found at QE intensity: N/A
+2025-07-17 16:13:51,943 - INFO - STR model significant: False
+2025-07-17 16:13:51,943 - INFO - Hansen threshold: 0.003
+2025-07-17 16:13:51,943 - INFO - 
+--- Testing Hypothesis 2: Investment Effects ---
+2025-07-17 16:13:51,943 - INFO - ==================================================
+2025-07-17 16:13:51,943 - INFO - TESTING HYPOTHESIS 2: QE IMPACT ON INVESTMENT
+2025-07-17 16:13:51,943 - INFO - ==================================================
+2025-07-17 16:13:51,951 - INFO - Hypothesis 2 dataset prepared: (13688, 23)
+2025-07-17 16:13:51,951 - INFO - Investment variable used: us_business_investment
+2025-07-17 16:13:51,951 - INFO - Investment range: 596.55 to 4089.45
+2025-07-17 16:13:51,952 - INFO - Running IV regression for investment equation...
+2025-07-17 16:13:51,962 - INFO - IV Results: QE coeff = -3.676 (p=0.009)
+2025-07-17 16:13:51,962 - INFO - Yield coeff = 0.046 (p=0.000)
+2025-07-17 16:13:51,962 - INFO - R² = 0.967
+2025-07-17 16:13:51,962 - INFO - Running local projections for dynamic effects...
+2025-07-17 16:13:52,115 - INFO - Local Projections: Peak effect at horizon 12 = 1493.929
+2025-07-17 16:13:52,115 - INFO - Analyzing investment channels...
+2025-07-17 16:13:52,123 - INFO - Testing robustness of investment results...
+2025-07-17 16:13:52,142 - INFO - Running IV regression for investment equation...
+2025-07-17 16:13:52,151 - INFO - IV Results: QE coeff = -1946.560 (p=0.316)
+2025-07-17 16:13:52,151 - INFO - Yield coeff = 0.073 (p=0.000)
+2025-07-17 16:13:52,151 - INFO - R² = 0.396
+2025-07-17 16:13:52,151 - INFO - Running IV regression for investment equation...
+2025-07-17 16:13:52,166 - INFO - IV Results: QE coeff = -4.388 (p=0.001)
+2025-07-17 16:13:52,167 - INFO - Yield coeff = 0.039 (p=0.000)
+2025-07-17 16:13:52,167 - INFO - R² = 0.954
+2025-07-17 16:13:52,167 - INFO - Running IV regression for investment equation...
+2025-07-17 16:13:52,177 - INFO - IV Results: QE coeff = -798.479 (p=0.000)
+2025-07-17 16:13:52,178 - INFO - Yield coeff = 0.060 (p=0.000)
+2025-07-17 16:13:52,178 - INFO - R² = 0.841
+2025-07-17 16:13:52,178 - INFO - Running IV regression for investment equation...
+2025-07-17 16:13:52,185 - INFO - IV Results: QE coeff = -6.819 (p=0.000)
+2025-07-17 16:13:52,185 - INFO - Yield coeff = 0.025 (p=0.000)
+2025-07-17 16:13:52,185 - INFO - R² = 0.988
+2025-07-17 16:13:52,203 - INFO - Creating Hypothesis 2 visualizations...
+2025-07-17 16:13:53,127 - INFO - Hypothesis 2 supported: True
+2025-07-17 16:13:53,127 - INFO - QE effect on investment: -3.675861785083533
+2025-07-17 16:13:53,127 - INFO - Investment effect significant: True
+2025-07-17 16:13:53,127 - INFO - 
+--- Testing Hypothesis 3: International Spillovers ---
+2025-07-17 16:13:53,127 - INFO - ==================================================
+2025-07-17 16:13:53,127 - INFO - TESTING HYPOTHESIS 3: INTERNATIONAL SPILLOVERS
+2025-07-17 16:13:53,127 - INFO - ==================================================
+2025-07-17 16:13:53,144 - INFO - Hypothesis 3 dataset prepared: (13693, 31)
+2025-07-17 16:13:53,144 - INFO - Available foreign variables: ['foreign_treasury_holdings', 'foreign_holdings_growth', 'foreign_holdings_change']
+2025-07-17 16:13:53,144 - INFO - Available FX variables: ['eur_usd', 'dxy', 'jpy_usd', 'gbp_usd', 'eur_usd_change', 'eur_usd_vol', 'dxy_change', 'dxy_vol', 'jpy_usd_change', 'jpy_usd_vol', 'gbp_usd_change', 'gbp_usd_vol']
+2025-07-17 16:13:53,144 - INFO - Analyzing foreign holdings response to QE...
+2025-07-17 16:13:53,151 - INFO - foreign_treasury_holdings: QE coeff = -19.078 (p=0.248)
+2025-07-17 16:13:53,156 - INFO - foreign_holdings_growth: QE coeff = 0.000 (p=nan)
+2025-07-17 16:13:53,160 - INFO - foreign_holdings_change: QE coeff = 0.000 (p=nan)
+2025-07-17 16:13:53,160 - INFO - Analyzing exchange rate effects...
+2025-07-17 16:13:53,163 - INFO - eur_usd: QE coeff = 16.679, implies dollar weakening
+2025-07-17 16:13:53,168 - INFO - jpy_usd: QE coeff = -3.324, implies dollar strengthening
+2025-07-17 16:13:53,173 - INFO - gbp_usd: QE coeff = 21.365, implies dollar weakening
+2025-07-17 16:13:53,175 - INFO - dxy: QE coeff = -10.977, implies dollar weakening
+2025-07-17 16:13:53,176 - INFO - Running Panel VAR analysis...
+2025-07-17 16:13:53,189 - INFO - Running high-frequency identification...
+2025-07-17 16:13:53,197 - INFO - Analyzing official vs private foreign flows...
+2025-07-17 16:13:53,197 - INFO - Creating Hypothesis 3 visualizations...
+2025-07-17 16:13:54,094 - INFO - Hypothesis 3 supported: False
+2025-07-17 16:13:54,095 - INFO - Evidence count: 1
+2025-07-17 16:13:54,095 - INFO - QE effect on foreign flows: N/A
+2025-07-17 16:13:54,095 - INFO - Foreign flow effect significant: False
+2025-07-17 16:13:54,095 - INFO - 
+4. GENERATING COMPREHENSIVE REPORT
+2025-07-17 16:13:54,095 - INFO - ------------------------------
+2025-07-17 16:13:54,095 - INFO - Generating comprehensive report...
+2025-07-17 16:13:54,099 - INFO - Comprehensive report saved to results/
+2025-07-17 16:13:54,099 - INFO - 
+5. CREATING VISUALIZATIONS
+2025-07-17 16:13:54,099 - INFO - ------------------------------
+2025-07-17 16:13:54,099 - INFO - Creating summary visualizations...
+2025-07-17 16:13:55,115 - INFO - Summary visualizations saved to results/summary_visualizations.png
+2025-07-17 16:13:55,115 - INFO - 
+============================================================
+2025-07-17 16:13:55,115 - INFO - ANALYSIS COMPLETED SUCCESSFULLY!
+2025-07-17 16:13:55,115 - INFO - ============================================================
+2025-07-17 16:13:55,115 - INFO - Total execution time: 0:00:10.630062
+2025-07-17 16:13:55,115 - INFO - Results saved in: results/
+2025-07-17 16:13:55,115 - INFO - Analysis covered 13693 observations from 1986-01-08 to 2025-01-06
+2025-07-17 16:13:55,115 - INFO - 
+KEY FINDINGS:
+2025-07-17 16:13:55,115 - INFO - • Hansen threshold regression confirms threshold at 0.3%
+2025-07-17 16:13:55,115 - INFO - • QE significantly affects investment with coefficient -3.676
+2025-07-17 16:13:55,115 - INFO - 
+POLICY IMPLICATIONS:
+2025-07-17 16:13:55,115 - INFO - • QE effectiveness has clear limits - policymakers should avoid excessive intervention
+2025-07-17 16:13:55,115 - INFO - • QE may have unintended consequences for long-term private investment
+2025-07-17 16:16:25,674 - INFO - ============================================================
+2025-07-17 16:16:25,674 - INFO - QUANTITATIVE EASING AND BOND MARKET DYNAMICS
+2025-07-17 16:16:25,674 - INFO - Main Analysis Pipeline
+2025-07-17 16:16:25,674 - INFO - ============================================================
+2025-07-17 16:16:25,674 - INFO - 
+1. DOWNLOADING DATA
+2025-07-17 16:16:25,674 - INFO - ------------------------------
+2025-07-17 16:16:25,674 - INFO - Using existing processed data. Delete data/processed to re-download.
+2025-07-17 16:16:25,674 - INFO - 
+2. LOADING AND PREPARING DATA
+2025-07-17 16:16:25,674 - INFO - ------------------------------
+2025-07-17 16:16:25,747 - INFO - Loaded us_panel: (35260, 33)
+2025-07-17 16:16:25,876 - INFO - Loaded combined_panel: (35260, 80)
+2025-07-17 16:16:25,912 - INFO - Loaded market_panel: (9129, 46)
+2025-07-17 16:16:25,912 - INFO - Preparing data for analysis...
+2025-07-17 16:16:25,976 - INFO - Data quality score: 45/100
+2025-07-17 16:16:26,016 - INFO - Analysis dataset prepared: (13693, 84)
+2025-07-17 16:16:26,017 - INFO - Date range: 1986-01-08 00:00:00 to 2025-01-06 00:00:00
+2025-07-17 16:16:26,017 - INFO - 
+3. RUNNING HYPOTHESIS TESTS
+2025-07-17 16:16:26,017 - INFO - ------------------------------
+2025-07-17 16:16:26,017 - INFO - ==================================================
+2025-07-17 16:16:26,017 - INFO - RUNNING HYPOTHESIS TESTS
+2025-07-17 16:16:26,017 - INFO - ==================================================
+2025-07-17 16:16:26,017 - INFO - 
+--- Testing Hypothesis 1: Threshold Effects ---
+2025-07-17 16:16:26,017 - INFO - ==================================================
+2025-07-17 16:16:26,017 - INFO - TESTING HYPOTHESIS 1: THRESHOLD EFFECTS ON YIELDS
+2025-07-17 16:16:26,018 - INFO - ==================================================
+2025-07-17 16:16:26,022 - INFO - Hypothesis 1 dataset prepared: (13692, 14)
+2025-07-17 16:16:26,022 - INFO - QE intensity range: 0.000 to 0.067
+2025-07-17 16:16:26,023 - INFO - Running Smooth Transition Regression (STR) analysis...
+2025-07-17 16:16:26,025 - INFO - Running Hansen threshold regression analysis...
+2025-07-17 16:16:32,177 - INFO - Hansen Results: Threshold = 0.003
+2025-07-17 16:16:32,177 - INFO - Regime 1: 8568 obs, Regime 2: 5124 obs, R² = 0.001
+2025-07-17 16:16:32,177 - INFO - Analyzing threshold mechanisms...
+2025-07-17 16:16:32,177 - INFO - Creating Hypothesis 1 visualizations...
+2025-07-17 16:16:33,405 - INFO - Hypothesis 1 supported: True
+2025-07-17 16:16:33,405 - INFO - STR threshold found at QE intensity: N/A
+2025-07-17 16:16:33,405 - INFO - STR model significant: False
+2025-07-17 16:16:33,405 - INFO - Hansen threshold: 0.003
+2025-07-17 16:16:33,405 - INFO - 
+--- Testing Hypothesis 2: Investment Effects ---
+2025-07-17 16:16:33,405 - INFO - ==================================================
+2025-07-17 16:16:33,405 - INFO - TESTING HYPOTHESIS 2: QE IMPACT ON INVESTMENT
+2025-07-17 16:16:33,406 - INFO - ==================================================
+2025-07-17 16:16:33,419 - INFO - Hypothesis 2 dataset prepared: (13688, 23)
+2025-07-17 16:16:33,420 - INFO - Investment variable used: us_business_investment
+2025-07-17 16:16:33,420 - INFO - Investment range: 596.55 to 4089.45
+2025-07-17 16:16:33,420 - INFO - Running IV regression for investment equation...
+2025-07-17 16:16:33,437 - INFO - IV Results: QE coeff = -3.676 (p=0.009)
+2025-07-17 16:16:33,437 - INFO - Yield coeff = 0.046 (p=0.000)
+2025-07-17 16:16:33,437 - INFO - R² = 0.967
+2025-07-17 16:16:33,437 - INFO - Running local projections for dynamic effects...
+2025-07-17 16:16:33,580 - INFO - Local Projections: Peak effect at horizon 12 = 1493.929
+2025-07-17 16:16:33,580 - INFO - Analyzing investment channels...
+2025-07-17 16:16:33,588 - INFO - Testing robustness of investment results...
+2025-07-17 16:16:33,612 - INFO - Running IV regression for investment equation...
+2025-07-17 16:16:33,621 - INFO - IV Results: QE coeff = -1946.560 (p=0.316)
+2025-07-17 16:16:33,621 - INFO - Yield coeff = 0.073 (p=0.000)
+2025-07-17 16:16:33,621 - INFO - R² = 0.396
+2025-07-17 16:16:33,621 - INFO - Running IV regression for investment equation...
+2025-07-17 16:16:33,633 - INFO - IV Results: QE coeff = -4.388 (p=0.001)
+2025-07-17 16:16:33,633 - INFO - Yield coeff = 0.039 (p=0.000)
+2025-07-17 16:16:33,633 - INFO - R² = 0.954
+2025-07-17 16:16:33,633 - INFO - Running IV regression for investment equation...
+2025-07-17 16:16:33,646 - INFO - IV Results: QE coeff = -798.479 (p=0.000)
+2025-07-17 16:16:33,646 - INFO - Yield coeff = 0.060 (p=0.000)
+2025-07-17 16:16:33,647 - INFO - R² = 0.841
+2025-07-17 16:16:33,647 - INFO - Running IV regression for investment equation...
+2025-07-17 16:16:33,657 - INFO - IV Results: QE coeff = -6.819 (p=0.000)
+2025-07-17 16:16:33,657 - INFO - Yield coeff = 0.025 (p=0.000)
+2025-07-17 16:16:33,657 - INFO - R² = 0.988
+2025-07-17 16:16:33,676 - INFO - Creating Hypothesis 2 visualizations...
+2025-07-17 16:16:34,577 - INFO - Hypothesis 2 supported: True
+2025-07-17 16:16:34,577 - INFO - QE effect on investment: -3.675861785083533
+2025-07-17 16:16:34,577 - INFO - Investment effect significant: True
+2025-07-17 16:16:34,577 - INFO - 
+--- Testing Hypothesis 3: International Spillovers ---
+2025-07-17 16:16:34,577 - INFO - ==================================================
+2025-07-17 16:16:34,577 - INFO - TESTING HYPOTHESIS 3: INTERNATIONAL SPILLOVERS
+2025-07-17 16:16:34,577 - INFO - ==================================================
+2025-07-17 16:16:34,596 - INFO - Hypothesis 3 dataset prepared: (13693, 31)
+2025-07-17 16:16:34,596 - INFO - Available foreign variables: ['foreign_holdings_growth', 'foreign_holdings_change', 'foreign_treasury_holdings']
+2025-07-17 16:16:34,597 - INFO - Available FX variables: ['gbp_usd', 'dxy', 'eur_usd', 'jpy_usd', 'gbp_usd_change', 'gbp_usd_vol', 'dxy_change', 'dxy_vol', 'eur_usd_change', 'eur_usd_vol', 'jpy_usd_change', 'jpy_usd_vol']
+2025-07-17 16:16:34,597 - INFO - Analyzing foreign holdings response to QE...
+2025-07-17 16:16:34,603 - INFO - foreign_holdings_growth: QE coeff = 0.000 (p=nan)
+2025-07-17 16:16:34,608 - INFO - foreign_holdings_change: QE coeff = 0.000 (p=nan)
+2025-07-17 16:16:34,612 - INFO - foreign_treasury_holdings: QE coeff = -19.078 (p=0.248)
+2025-07-17 16:16:34,612 - INFO - Analyzing exchange rate effects...
+2025-07-17 16:16:34,615 - INFO - gbp_usd: QE coeff = 21.365, implies dollar weakening
+2025-07-17 16:16:34,618 - INFO - eur_usd: QE coeff = 16.679, implies dollar weakening
+2025-07-17 16:16:34,623 - INFO - jpy_usd: QE coeff = -3.324, implies dollar strengthening
+2025-07-17 16:16:34,627 - INFO - dxy: QE coeff = -10.977, implies dollar weakening
+2025-07-17 16:16:34,627 - INFO - Running Panel VAR analysis...
+2025-07-17 16:16:34,643 - INFO - Running high-frequency identification...
+2025-07-17 16:16:34,652 - INFO - Analyzing official vs private foreign flows...
+2025-07-17 16:16:34,652 - INFO - Creating Hypothesis 3 visualizations...
+2025-07-17 16:16:35,475 - INFO - Hypothesis 3 supported: False
+2025-07-17 16:16:35,475 - INFO - Evidence count: 1
+2025-07-17 16:16:35,475 - INFO - QE effect on foreign flows: N/A
+2025-07-17 16:16:35,475 - INFO - Foreign flow effect significant: False
+2025-07-17 16:16:35,475 - INFO - 
+4. GENERATING COMPREHENSIVE REPORT
+2025-07-17 16:16:35,475 - INFO - ------------------------------
+2025-07-17 16:16:35,475 - INFO - Generating comprehensive report...
+2025-07-17 16:16:35,482 - INFO - Comprehensive report saved to results/
+2025-07-17 16:16:35,482 - INFO - 
+5. CREATING VISUALIZATIONS
+2025-07-17 16:16:35,482 - INFO - ------------------------------
+2025-07-17 16:16:35,482 - INFO - Creating summary visualizations...
+2025-07-17 16:16:36,469 - INFO - Summary visualizations saved to results/summary_visualizations.png
+2025-07-17 16:16:36,469 - INFO - 
+============================================================
+2025-07-17 16:16:36,469 - INFO - ANALYSIS COMPLETED SUCCESSFULLY!
+2025-07-17 16:16:36,469 - INFO - ============================================================
+2025-07-17 16:16:36,469 - INFO - Total execution time: 0:00:10.795391
+2025-07-17 16:16:36,469 - INFO - Results saved in: results/
+2025-07-17 16:16:36,469 - INFO - Analysis covered 13693 observations from 1986-01-08 to 2025-01-06
+2025-07-17 16:16:36,469 - INFO - 
+KEY FINDINGS:
+2025-07-17 16:16:36,469 - INFO - • Hansen threshold regression confirms threshold at 0.3%
+2025-07-17 16:16:36,469 - INFO - • QE significantly affects investment with coefficient -3.676
+2025-07-17 16:16:36,469 - INFO - 
+POLICY IMPLICATIONS:
+2025-07-17 16:16:36,469 - INFO - • QE effectiveness has clear limits - policymakers should avoid excessive intervention
+2025-07-17 16:16:36,470 - INFO - • QE may have unintended consequences for long-term private investment

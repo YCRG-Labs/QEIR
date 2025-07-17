@@ -209,16 +209,16 @@ def run_iv_regression(data):
         std_errors = pd.Series(second_stage.bse, index=coeff_names)
         t_stats = pd.Series(second_stage.tvalues, index=coeff_names)
         p_values = pd.Series(second_stage.pvalues, index=coeff_names)
-        
+
         # Find QE coefficients
-        qe_coeff = coeffs.iloc[1] if len(coeffs) > 1 else np.nan  # qe_intensity_squared
-        qe_se = std_errors.iloc[1] if len(std_errors) > 1 else np.nan
-        qe_pvalue = p_values.iloc[1] if len(p_values) > 1 else np.nan
-        
+        qe_coeff = coeffs.get('qe_intensity_squared', np.nan)
+        qe_se = std_errors.get('qe_intensity_squared', np.nan)
+        qe_pvalue = p_values.get('qe_intensity_squared', np.nan)
+
         # Interest rate coefficient
-        yield_coeff = coeffs.iloc[0] if len(coeffs) > 0 else np.nan  # long_yield
-        yield_se = std_errors.iloc[0] if len(std_errors) > 0 else np.nan
-        yield_pvalue = p_values.iloc[0] if len(p_values) > 0 else np.nan
+        yield_coeff = coeffs.get('long_yield', np.nan)
+        yield_se = std_errors.get('long_yield', np.nan)
+        yield_pvalue = p_values.get('long_yield', np.nan)
         
         results = {
             'dependent_variable': dep_var_name,
