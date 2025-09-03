@@ -1,0 +1,31 @@
+{
+  "start_date": "2008-01-01",
+  "end_date": "2023-12-31",
+  "confidence_level": 0.95,
+  "bootstrap_iterations": 1000,
+  
+  "h1_threshold_trim": 0.15,
+  "h1_min_regime_size": 10,
+  "h1_test_alternative_thresholds": true,
+  "h1_confidence_proxy": "consumer_confidence",
+  "h1_reaction_proxy": "fed_total_assets",
+  
+  "h2_max_horizon": 20,
+  "h2_lags": 4,
+  "h2_use_instrumental_variables": true,
+  "h2_investment_measure": "private_fixed_investment",
+  "h2_distortion_proxy": "corporate_bond_spreads",
+  
+  "h3_causality_lags": 4,
+  "h3_test_spillovers": true,
+  "h3_exchange_rate_measure": "trade_weighted_dollar",
+  "h3_inflation_measure": "cpi_all_items",
+  
+  "enable_robustness_tests": true,
+  "test_alternative_periods": true,
+  "test_alternative_specifications": true,
+  
+  "generate_publication_outputs": true,
+  "output_directory": "hypothesis_testing_results",
+  "save_intermediate_results": true
+}

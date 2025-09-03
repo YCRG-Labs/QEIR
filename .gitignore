@@ -204,4 +204,32 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific
 /data/
+/logs/
+/results/
+/publication_outputs/
+/output/
+/demo_results/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.pkl
+*.log
+*.tex
+!docs/images/
+
+
+# Temporary files
+debug_import.py
+simple_test.py
+test_import.py
+
+# API keys and sensitive data
+.env
+*.key
+*_key.txt
+/figures/
