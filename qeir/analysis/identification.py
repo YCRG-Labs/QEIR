@@ -517,6 +517,63 @@ class InstrumentValidator:
             for i, rec in enumerate(test_results['recommendations'], 1):
                 print(f"{i}. {rec}")
     
+    def high_frequency_identification(self,
+                                fomc_dates: pd.DatetimeIndex,
+                                treasury_futures_2y: pd.Series,
+                                treasury_futures_10y: pd.Series,
+                                window_minutes: int = 30) -> Dict:
+        """
+        Implement high-frequency identification around FOMC announcements
+        following Gertler & Karadi (2015) and Swanson (2021).
+        
+        Parameters:
+        -----------
+        fomc_dates : pd.DatetimeIndex
+            Dates of FOMC announcements
+        treasury_futures_2y : pd.Series
+            2-year Treasury futures prices (high frequency)
+        treasury_futures_10y : pd.Series
+            10-year Treasury futures prices (high frequency)
+        window_minutes : int, default=30
+            Window around announcements in minutes
+            
+        Returns:
+        --------
+        Dict containing high-frequency surprises and instruments
+        """
+        surprises_2y = []
+        surprises_10y = []
+        
+        for fomc_date in fomc_dates:
+            # Extract price changes in window around announcement
+            start_window = fomc_date - pd.Timedelta(minutes=window_minutes//2)
+            end_window = fomc_date + pd.Timedelta(minutes=window_minutes//2)
+            
+            # Calculate price changes (surprises)
+            try:
+                pre_price_2y = treasury_futures_2y.loc[start_window]
+                post_price_2y = treasury_futures_2y.loc[end_window]
+                surprise_2y = post_price_2y - pre_price_2y
+                
+                pre_price_10y = treasury_futures_10y.loc[start_window]
+                post_price_10y = treasury_futures_10y.loc[end_window]
+                surprise_10y = post_price_10y - pre_price_10y
+                
+                surprises_2y.append(surprise_2y)
+                surprises_10y.append(surprise_10y)
+                
+            except KeyError:
+                # Handle missing data
+                surprises_2y.append(np.nan)
+                surprises_10y.append(np.nan)
+        
+        return {
+            'fomc_dates': fomc_dates,
+            'surprises_2y': np.array(surprises_2y),
+            'surprises_10y': np.array(surprises_10y),
+            'qe_instrument': np.array(surprises_10y) - np.array(surprises_2y)  # Term structure surprise
+        }
+
     def fomc_rotation_instrument(self, 
                                dates: pd.DatetimeIndex,
                                fed_districts: Optional[List[str]] = None) -> np.ndarray:

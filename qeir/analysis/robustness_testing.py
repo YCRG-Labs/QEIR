@@ -99,6 +99,197 @@ class RobustnessTestSuite:
                 start_date = pd.to_datetime(date_range[0])
                 end_date = pd.to_datetime(date_range[1])
                 
+                period_data = self.base_data.loc[start_date:end_date].copy()
+                
+                if len(period_data) < 20:  # Minimum sample size
+                    warnings.warn(f"Insufficient data for period {period_name}")
+                    continue
+                
+                # Fit model for this period
+                model_result = model_func(
+                    data=period_data,
+                    dependent_var=dependent_var,
+                    independent_vars=independent_vars
+                )
+                
+                # Extract key coefficient (assuming first independent variable is main QE measure)
+                main_coef = model_result.params[independent_vars[0]]
+                main_se = model_result.bse[independent_vars[0]]
+                main_pval = model_result.pvalues[independent_vars[0]]
+                
+                # Calculate confidence interval
+                ci_lower = main_coef - 1.96 * main_se
+                ci_upper = main_coef + 1.96 * main_se
+                
+                results[period_name] = RobustnessResult(
+                    test_name='temporal_robustness',
+                    specification=period_name,
+                    coefficient=main_coef,
+                    std_error=main_se,
+                    p_value=main_pval,
+                    confidence_interval=(ci_lower, ci_upper),
+                    sample_size=len(period_data),
+                    r_squared=model_result.rsquared if hasattr(model_result, 'rsquared') else np.nan,
+                    additional_stats={'period': date_range}
+                )
+                
+            except Exception as e:
+                warnings.warn(f"Error in temporal robustness test for {period_name}: {str(e)}")
+                continue
+        
+        self.results['temporal_robustness'] = results
+        return results
+    
+    def multiple_threshold_test(self,
+                              threshold_var: str,
+                              dependent_var: str,
+                              qe_var: str,
+                              control_vars: List[str],
+                              max_thresholds: int = 3) -> Dict:
+        """
+        Test for multiple thresholds following Hansen (2000) sequential testing
+        
+        Parameters:
+        -----------
+        threshold_var : str
+            Variable to test for thresholds (e.g., debt service burden)
+        dependent_var : str
+            Dependent variable
+        qe_var : str
+            QE intensity variable
+        control_vars : List[str]
+            Control variables
+        max_thresholds : int, default=3
+            Maximum number of thresholds to test
+            
+        Returns:
+        --------
+        Dict containing threshold test results
+        """
+        from qeir.core.threshold_regression import EnhancedThresholdRegression
+        
+        data = self.base_data.dropna(subset=[threshold_var, dependent_var, qe_var] + control_vars)
+        
+        threshold_results = {}
+        current_data = data.copy()
+        
+        for n_thresh in range(1, max_thresholds + 1):
+            try:
+                # Fit threshold model
+                threshold_model = EnhancedThresholdRegression(
+                    confidence_interactions=True,
+                    bootstrap_iterations=1000
+                )
+                
+                result = threshold_model.fit(
+                    data=current_data,
+                    dependent_var=dependent_var,
+                    threshold_var=threshold_var,
+                    qe_var=qe_var,
+                    control_vars=control_vars
+                )
+                
+                threshold_results[f'threshold_{n_thresh}'] = {
+                    'threshold_estimate': result['threshold_estimate'],
+                    'confidence_interval': result['confidence_interval'],
+                    'test_statistic': result['test_statistic'],
+                    'p_value': result['p_value'],
+                    'significant': result['p_value'] < 0.05
+                }
+                
+                # If not significant, stop testing
+                if result['p_value'] >= 0.05:
+                    break
+                    
+            except Exception as e:
+                warnings.warn(f"Error in threshold test {n_thresh}: {str(e)}")
+                break
+        
+        return threshold_results
+    
+    def driscoll_kraay_standard_errors(self,
+                                     model_result,
+                                     data: pd.DataFrame,
+                                     max_lags: int = 4) -> Dict:
+        """
+        Compute Driscoll-Kraay standard errors robust to serial correlation
+        and cross-sectional dependence
+        
+        Parameters:
+        -----------
+        model_result : regression result object
+            Fitted regression model
+        data : pd.DataFrame
+            Data used in regression
+        max_lags : int, default=4
+            Maximum number of lags for HAC correction
+            
+        Returns:
+        --------
+        Dict containing corrected standard errors and test statistics
+        """
+        try:
+            # Extract residuals and design matrix
+            residuals = model_result.resid
+            X = model_result.model.exog
+            
+            # Compute Driscoll-Kraay covariance matrix
+            n_obs = len(residuals)
+            k_vars = X.shape[1]
+            
+            # Newey-West type correction with Driscoll-Kraay modification
+            XpX_inv = np.linalg.inv(X.T @ X)
+            
+            # Initialize covariance matrix
+            S = np.zeros((k_vars, k_vars))
+            
+            # Add contemporaneous term
+            for t in range(n_obs):
+                x_t = X[t:t+1, :].T
+                S += x_t @ x_t.T * (residuals[t] ** 2)
+            
+            # Add lagged terms with Bartlett weights
+            for lag in range(1, min(max_lags + 1, n_obs)):
+                weight = 1 - lag / (max_lags + 1)  # Bartlett kernel
+                
+                for t in range(lag, n_obs):
+                    x_t = X[t:t+1, :].T
+                    x_t_lag = X[t-lag:t-lag+1, :].T
+                    
+                    cross_term = (x_t @ x_t_lag.T * residuals[t] * residuals[t-lag] +
+                                 x_t_lag @ x_t.T * residuals[t-lag] * residuals[t])
+                    
+                    S += weight * cross_term
+            
+            # Final covariance matrix
+            V_dk = XpX_inv @ S @ XpX_inv / n_obs
+            
+            # Standard errors
+            se_dk = np.sqrt(np.diag(V_dk))
+            
+            # T-statistics
+            t_stats_dk = model_result.params / se_dk
+            
+            # P-values (two-tailed)
+            p_values_dk = 2 * (1 - stats.t.cdf(np.abs(t_stats_dk), n_obs - k_vars))
+            
+            return {
+                'standard_errors': se_dk,
+                't_statistics': t_stats_dk,
+                'p_values': p_values_dk,
+                'covariance_matrix': V_dk,
+                'method': 'Driscoll-Kraay'
+            }
+            
+        except Exception as e:
+            warnings.warn(f"Error computing Driscoll-Kraay standard errors: {str(e)}")
+            return {
+                'standard_errors': model_result.bse,
+                't_statistics': model_result.tvalues,
+                'p_values': model_result.pvalues,
+                'method': 'OLS (fallback)'
+            }
+                
                 period_data = self.base_data[
                     (self.base_data.index >= start_date) & 
                     (self.base_data.index <= end_date)

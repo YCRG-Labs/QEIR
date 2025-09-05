@@ -722,4 +722,208 @@ class Hypothesis1ThresholdDetector:
                 'transition_matrix': var_model.transition_matrix.tolist() if var_model.transition_matrix is not None else None
             }
         
-        return diagnostics
+        return diagnostics    def 
+sequential_threshold_test(self,
+                                y: np.ndarray,
+                                X: np.ndarray,
+                                threshold_var: np.ndarray,
+                                max_thresholds: int = 3,
+                                significance_level: float = 0.05) -> Dict[str, Any]:
+        """
+        Sequential testing for multiple thresholds following Hansen (2000)
+        
+        Parameters:
+        -----------
+        y : np.ndarray
+            Dependent variable
+        X : np.ndarray
+            Regressor matrix
+        threshold_var : np.ndarray
+            Threshold variable
+        max_thresholds : int, default=3
+            Maximum number of thresholds to test
+        significance_level : float, default=0.05
+            Significance level for threshold tests
+            
+        Returns:
+        --------
+        Dict containing results for each threshold test
+        """
+        results = {}
+        current_data_indices = np.arange(len(y))
+        
+        for n_thresh in range(1, max_thresholds + 1):
+            # Test for threshold in current data subset
+            current_y = y[current_data_indices]
+            current_X = X[current_data_indices]
+            current_threshold_var = threshold_var[current_data_indices]
+            
+            # Fit threshold model
+            self.fit(current_y, current_X, current_threshold_var)
+            
+            # Calculate test statistic
+            test_stat = self.threshold_test_statistic()
+            
+            # Bootstrap p-value
+            p_value = self.bootstrap_threshold_test(
+                current_y, current_X, current_threshold_var,
+                n_bootstrap=1000
+            )
+            
+            results[f'threshold_{n_thresh}'] = {
+                'threshold_estimate': self.threshold_estimate,
+                'test_statistic': test_stat,
+                'p_value': p_value,
+                'significant': p_value < significance_level,
+                'sample_size': len(current_data_indices)
+            }
+            
+            # If threshold not significant, stop testing
+            if p_value >= significance_level:
+                break
+            
+            # For next iteration, split data at estimated threshold
+            # (This is simplified - full implementation would be more complex)
+            if n_thresh < max_thresholds:
+                # Split data for next threshold search
+                below_threshold = current_threshold_var <= self.threshold_estimate
+                if np.sum(below_threshold) > 20 and np.sum(~below_threshold) > 20:
+                    # Choose larger subsample for next test
+                    if np.sum(below_threshold) > np.sum(~below_threshold):
+                        current_data_indices = current_data_indices[below_threshold]
+                    else:
+                        current_data_indices = current_data_indices[~below_threshold]
+                else:
+                    break
+        
+        return results
+    
+    def time_varying_threshold_test(self,
+                                  y: np.ndarray,
+                                  X: np.ndarray,
+                                  threshold_var: np.ndarray,
+                                  dates: pd.DatetimeIndex,
+                                  window_size: int = 60) -> Dict[str, Any]:
+        """
+        Test for time-varying thresholds using rolling window estimation
+        
+        Parameters:
+        -----------
+        y : np.ndarray
+            Dependent variable
+        X : np.ndarray
+            Regressor matrix
+        threshold_var : np.ndarray
+            Threshold variable
+        dates : pd.DatetimeIndex
+            Time index
+        window_size : int, default=60
+            Rolling window size in months
+            
+        Returns:
+        --------
+        Dict containing time-varying threshold estimates
+        """
+        n_obs = len(y)
+        threshold_estimates = []
+        test_statistics = []
+        window_dates = []
+        
+        for i in range(window_size, n_obs):
+            # Extract window data
+            start_idx = i - window_size
+            end_idx = i
+            
+            window_y = y[start_idx:end_idx]
+            window_X = X[start_idx:end_idx]
+            window_threshold_var = threshold_var[start_idx:end_idx]
+            
+            try:
+                # Fit threshold model for this window
+                self.fit(window_y, window_X, window_threshold_var)
+                
+                threshold_estimates.append(self.threshold_estimate)
+                test_statistics.append(self.threshold_test_statistic())
+                window_dates.append(dates[end_idx])
+                
+            except Exception:
+                # Handle estimation failures
+                threshold_estimates.append(np.nan)
+                test_statistics.append(np.nan)
+                window_dates.append(dates[end_idx])
+        
+        # Test for stability of threshold estimates
+        threshold_series = pd.Series(threshold_estimates, index=window_dates)
+        threshold_std = threshold_series.std()
+        threshold_mean = threshold_series.mean()
+        
+        # Coefficient of variation as stability measure
+        stability_measure = threshold_std / threshold_mean if threshold_mean != 0 else np.inf
+        
+        return {
+            'threshold_estimates': threshold_estimates,
+            'test_statistics': test_statistics,
+            'dates': window_dates,
+            'stability_measure': stability_measure,
+            'stable_threshold': stability_measure < 0.1  # Threshold for stability
+        }
+    
+    def placebo_test(self,
+                   y: np.ndarray,
+                   X: np.ndarray,
+                   threshold_var: np.ndarray,
+                   pre_qe_period: Tuple[int, int]) -> Dict[str, Any]:
+        """
+        Conduct placebo test using pre-QE period data
+        
+        Parameters:
+        -----------
+        y : np.ndarray
+            Dependent variable
+        X : np.ndarray
+            Regressor matrix
+        threshold_var : np.ndarray
+            Threshold variable
+        pre_qe_period : Tuple[int, int]
+            Start and end indices for pre-QE period
+            
+        Returns:
+        --------
+        Dict containing placebo test results
+        """
+        start_idx, end_idx = pre_qe_period
+        
+        # Extract pre-QE data
+        placebo_y = y[start_idx:end_idx]
+        placebo_X = X[start_idx:end_idx]
+        placebo_threshold_var = threshold_var[start_idx:end_idx]
+        
+        try:
+            # Fit threshold model on pre-QE data
+            self.fit(placebo_y, placebo_X, placebo_threshold_var)
+            
+            # Calculate test statistic
+            placebo_test_stat = self.threshold_test_statistic()
+            
+            # Bootstrap p-value
+            placebo_p_value = self.bootstrap_threshold_test(
+                placebo_y, placebo_X, placebo_threshold_var,
+                n_bootstrap=1000
+            )
+            
+            return {
+                'placebo_threshold': self.threshold_estimate,
+                'placebo_test_statistic': placebo_test_stat,
+                'placebo_p_value': placebo_p_value,
+                'spurious_threshold': placebo_p_value < 0.05,
+                'sample_size': len(placebo_y)
+            }
+            
+        except Exception as e:
+            return {
+                'placebo_threshold': np.nan,
+                'placebo_test_statistic': np.nan,
+                'placebo_p_value': np.nan,
+                'spurious_threshold': False,
+                'error': str(e)
+            }

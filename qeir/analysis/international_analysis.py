@@ -43,6 +43,188 @@ class InternationalAnalyzer:
         self.analysis_results = {}
         self.fitted_models = {}
         
+    def heterogeneity_analysis(self,
+                             foreign_holdings: pd.DataFrame,
+                             qe_intensity: pd.Series,
+                             exchange_rates: pd.DataFrame,
+                             country_characteristics: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Analyze heterogeneous spillover effects by country characteristics
+        
+        Parameters:
+        -----------
+        foreign_holdings : pd.DataFrame
+            Foreign Treasury holdings by country
+        qe_intensity : pd.Series
+            QE intensity measure
+        exchange_rates : pd.DataFrame
+            Exchange rates vs USD
+        country_characteristics : pd.DataFrame
+            Country characteristics (exchange rate regime, financial development, etc.)
+            
+        Returns:
+        --------
+        Dict containing heterogeneity analysis results
+        """
+        results = {}
+        
+        # Separate countries by exchange rate regime
+        if 'exchange_rate_regime' in country_characteristics.columns:
+            fixed_rate_countries = country_characteristics[
+                country_characteristics['exchange_rate_regime'] == 'fixed'
+            ].index.tolist()
+            
+            floating_rate_countries = country_characteristics[
+                country_characteristics['exchange_rate_regime'] == 'floating'
+            ].index.tolist()
+            
+            # Analyze spillovers for each group
+            for regime, countries in [('fixed', fixed_rate_countries), 
+                                    ('floating', floating_rate_countries)]:
+                if countries:
+                    regime_holdings = foreign_holdings[countries].sum(axis=1)
+                    regime_fx = exchange_rates[countries].mean(axis=1) if len(countries) > 1 else exchange_rates[countries[0]]
+                    
+                    # Holdings response
+                    holdings_model = self._estimate_spillover_model(
+                        regime_holdings, qe_intensity
+                    )
+                    
+                    # FX response
+                    fx_model = self._estimate_spillover_model(
+                        regime_fx.pct_change(), qe_intensity
+                    )
+                    
+                    results[f'{regime}_rate_regime'] = {
+                        'holdings_response': holdings_model,
+                        'fx_response': fx_model,
+                        'countries': countries
+                    }
+        
+        # Separate by financial development
+        if 'financial_development' in country_characteristics.columns:
+            developed = country_characteristics[
+                country_characteristics['financial_development'] == 'advanced'
+            ].index.tolist()
+            
+            emerging = country_characteristics[
+                country_characteristics['financial_development'] == 'emerging'
+            ].index.tolist()
+            
+            for dev_level, countries in [('advanced', developed), ('emerging', emerging)]:
+                if countries:
+                    dev_holdings = foreign_holdings[countries].sum(axis=1)
+                    
+                    holdings_model = self._estimate_spillover_model(
+                        dev_holdings, qe_intensity
+                    )
+                    
+                    results[f'{dev_level}_economies'] = {
+                        'holdings_response': holdings_model,
+                        'countries': countries
+                    }
+        
+        return results
+    
+    def var_with_sign_restrictions(self,
+                                 data: pd.DataFrame,
+                                 qe_var: str,
+                                 foreign_vars: List[str],
+                                 lags: int = 4) -> Dict[str, Any]:
+        """
+        Estimate VAR with sign restrictions for QE spillover identification
+        
+        Parameters:
+        -----------
+        data : pd.DataFrame
+            Data containing all variables
+        qe_var : str
+            QE intensity variable name
+        foreign_vars : List[str]
+            Foreign variables (holdings, exchange rates)
+        lags : int, default=4
+            Number of lags in VAR
+            
+        Returns:
+        --------
+        Dict containing VAR results with sign restrictions
+        """
+        # Prepare data
+        var_data = data[[qe_var] + foreign_vars].dropna()
+        
+        # Estimate unrestricted VAR
+        var_model = VAR(var_data)
+        var_results = var_model.fit(lags)
+        
+        # Implement sign restrictions (simplified)
+        # QE shock should: increase QE, decrease foreign holdings, depreciate USD
+        sign_restrictions = {
+            qe_var: 1,  # Positive QE shock
+            # Foreign holdings should decrease (negative sign)
+            # Exchange rates should increase (USD depreciation, positive sign)
+        }
+        
+        # Extract structural shocks (this is simplified - full implementation
+        # would use proper sign restriction algorithms)
+        structural_shocks = self._apply_sign_restrictions(
+            var_results, sign_restrictions
+        )
+        
+        # Calculate impulse responses
+        irf = var_results.irf(periods=12)
+        
+        return {
+            'var_results': var_results,
+            'structural_shocks': structural_shocks,
+            'impulse_responses': irf,
+            'sign_restrictions': sign_restrictions
+        }
+    
+    def _apply_sign_restrictions(self, var_results, sign_restrictions: Dict) -> np.ndarray:
+        """Apply sign restrictions to identify structural shocks (simplified)"""
+        # This is a placeholder for proper sign restriction implementation
+        # Full implementation would use algorithms from Uhlig (2005) or similar
+        
+        # For now, return reduced-form residuals
+        return var_results.resid.values
+    
+    def _estimate_spillover_model(self, 
+                                dependent_var: pd.Series,
+                                qe_intensity: pd.Series,
+                                lags: int = 4) -> Dict[str, Any]:
+        """Estimate basic spillover regression model"""
+        # Align data
+        common_index = dependent_var.index.intersection(qe_intensity.index)
+        y = dependent_var.loc[common_index]
+        x = qe_intensity.loc[common_index]
+        
+        # Add lags
+        X_matrix = []
+        for lag in range(lags + 1):
+            if lag == 0:
+                X_matrix.append(x.values)
+            else:
+                X_matrix.append(x.shift(lag).values)
+        
+        X = np.column_stack(X_matrix)
+        X = sm.add_constant(X)
+        
+        # Remove NaN rows
+        valid_rows = ~np.isnan(X).any(axis=1) & ~np.isnan(y.values)
+        X_clean = X[valid_rows]
+        y_clean = y.values[valid_rows]
+        
+        # Estimate model
+        model = OLS(y_clean, X_clean).fit()
+        
+        return {
+            'coefficient': model.params[1],  # Contemporary QE effect
+            'std_error': model.bse[1],
+            'p_value': model.pvalues[1],
+            'r_squared': model.rsquared,
+            'full_results': model
+        }
+
     def foreign_holdings_response_model(self,
                                       foreign_holdings: pd.DataFrame,
                                       qe_intensity: pd.Series,

@@ -232,4 +232,4 @@ test_import.py
 .env
 *.key
 *_key.txt
-/figures/
+/paper/
