@@ -7,4 +7,6 @@ Code associated with:
 <sup>1</sup> Yee Collins Research Group; 06883, CT USA  
 <sup>2</sup> New York University; 10003, NY USA
 
+Preprint: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5445554
+
 Correspondence: b.yee@ycrg-labs.org
