@@ -1,0 +1,115 @@
+{
+  "description": "Example configuration for revised QE methodology analysis",
+  "version": "2.0",
+  "last_updated": "2024-01-01",
+  
+  "data_settings": {
+    "start_date": "2008-01-01",
+    "end_date": "2023-12-31",
+    "frequency": "Q",
+    "comment": "Quarterly frequency for revised methodology"
+  },
+  
+  "high_frequency_identification": {
+    "hf_window_minutes": 30,
+    "fomc_config_path": "qeir/config/fomc_announcements.json",
+    "hf_asset_classes": [
+      "fed_funds_futures",
+      "eurodollar_futures",
+      "treasury_10y"
+    ],
+    "comment": "High-frequency identification following Swanson (2021)"
+  },
+  
+  "threshold_regression": {
+    "threshold_trim": 0.15,
+    "threshold_grid_size": 100,
+    "bootstrap_iterations": 1000,
+    "confidence_level": 0.95,
+    "comment": "Hansen threshold regression with instrumented shocks"
+  },
+  
+  "local_projections": {
+    "lp_max_horizon": 20,
+    "lp_hac_lags": 4,
+    "comment": "Local projections with HAC standard errors"
+  },
+  
+  "market_distortion_index": {
+    "distortion_components": [
+      "liquidity",
+      "balance_sheet",
+      "concentration"
+    ],
+    "normalization_method": "standard",
+    "comment": "Three-component distortion index with StandardScaler normalization"
+  },
+  
+  "channel_decomposition": {
+    "decomposition_horizon": 12,
+    "target_distortion_share": 0.65,
+    "target_rate_share": 0.35,
+    "share_tolerance": 0.05,
+    "comment": "Structural channel decomposition targeting 65%/35% split"
+  },
+  
+  "instrument_validation": {
+    "weak_instrument_threshold": 10.0,
+    "comment": "First-stage F-statistic must exceed 10 for valid instruments"
+  },
+  
+  "robustness_testing": {
+    "robustness_specifications": [
+      "double_threshold",
+      "smooth_transition",
+      "alternative_fiscal",
+      "alternative_distortion",
+      "qe_episodes",
+      "shadow_rate",
+      "alternative_hf_windows"
+    ],
+    "alternative_fiscal_indicators": [
+      "gross_debt_gdp",
+      "primary_deficit_gdp",
+      "r_minus_g",
+      "cbo_fiscal_gap"
+    ],
+    "alternative_distortion_measures": [
+      "fails_to_deliver",
+      "repo_specialness",
+      "clearing_volumes",
+      "dealer_capital_ratios"
+    ],
+    "qe_episodes": [
+      "QE1",
+      "QE2",
+      "QE3",
+      "COVID_QE"
+    ],
+    "comment": "Comprehensive robustness testing suite"
+  },
+  
+  "target_estimates": {
+    "target_threshold": 0.285,
+    "target_threshold_ci": [0.27, 0.30],
+    "target_low_regime_effect": -9.4,
+    "target_high_regime_effect": -3.5,
+    "target_attenuation_pct": 63.0,
+    "target_cumulative_investment": -2.7,
+    "comment": "Target estimates for validation (basis points and percentage points)"
+  },
+  
+  "hypothesis3_deprecation": {
+    "include_hypothesis3": false,
+    "comment": "Hypothesis 3 (International Spillovers) is deprecated in revised methodology"
+  },
+  
+  "output_settings": {
+    "output_dir": "output",
+    "generate_latex_tables": true,
+    "generate_publication_figures": true,
+    "figure_format": "pdf",
+    "figure_dpi": 300,
+    "comment": "Publication-ready output generation"
+  }
+}

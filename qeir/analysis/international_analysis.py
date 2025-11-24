@@ -12,15 +12,64 @@ from scipy import stats
 from scipy.linalg import inv
 from scipy.optimize import minimize
 import warnings
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Any
+from functools import wraps
 import statsmodels.api as sm
 from statsmodels.tsa.api import VAR
 from statsmodels.regression.linear_model import OLS
 
 
+def deprecated(reason: str):
+    """
+    Decorator to mark classes or functions as deprecated.
+    
+    Args:
+        reason: Explanation for why the item is deprecated
+    """
+    def decorator(obj):
+        if isinstance(obj, type):
+            # Decorating a class
+            original_init = obj.__init__
+            
+            @wraps(original_init)
+            def new_init(self, *args, **kwargs):
+                warnings.warn(
+                    f"{obj.__name__} is deprecated. {reason}",
+                    category=DeprecationWarning,
+                    stacklevel=2
+                )
+                original_init(self, *args, **kwargs)
+            
+            obj.__init__ = new_init
+            return obj
+        else:
+            # Decorating a function
+            @wraps(obj)
+            def wrapper(*args, **kwargs):
+                warnings.warn(
+                    f"{obj.__name__} is deprecated. {reason}",
+                    category=DeprecationWarning,
+                    stacklevel=2
+                )
+                return obj(*args, **kwargs)
+            return wrapper
+    return decorator
+
+
+@deprecated(
+    "Hypothesis 3 (International Spillovers) has been deprecated as part of the "
+    "methodology revision. The analysis now focuses exclusively on domestic fiscal "
+    "and investment channels (Hypotheses 1 and 2). This class is preserved for "
+    "backward compatibility but should not be used in new analyses."
+)
 class InternationalAnalyzer:
     """
     Comprehensive international spillover analysis class for QE effects.
+    
+    .. deprecated::
+        This class is deprecated as part of the QE methodology revision.
+        Hypothesis 3 (International Spillovers) is no longer part of the main
+        analysis pipeline. Use domestic-focused analyses instead.
     
     This class implements enhanced methods for analyzing international transmission
     of QE effects, including:

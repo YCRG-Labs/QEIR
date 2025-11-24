@@ -289,54 +289,6 @@ class RobustnessTestSuite:
                 'p_values': model_result.pvalues,
                 'method': 'OLS (fallback)'
             }
-                
-                period_data = self.base_data[
-                    (self.base_data.index >= start_date) & 
-                    (self.base_data.index <= end_date)
-                ].copy()
-                
-                if len(period_data) < 20:  # Minimum sample size check
-                    warnings.warn(f"Insufficient data for period {period_name}: {len(period_data)} observations")
-                    continue
-                
-                # Fit model for this period
-                model_result = model_func(
-                    data=period_data,
-                    dependent_var=dependent_var,
-                    independent_vars=independent_vars
-                )
-                
-                # Extract key coefficient (assume first independent variable is main QE variable)
-                main_coef = model_result.params[independent_vars[0]]
-                main_se = model_result.bse[independent_vars[0]]
-                main_pval = model_result.pvalues[independent_vars[0]]
-                
-                # Calculate confidence interval
-                ci_lower = main_coef - 1.96 * main_se
-                ci_upper = main_coef + 1.96 * main_se
-                
-                results[period_name] = RobustnessResult(
-                    test_name="temporal_robustness",
-                    specification=period_name,
-                    coefficient=main_coef,
-                    std_error=main_se,
-                    p_value=main_pval,
-                    confidence_interval=(ci_lower, ci_upper),
-                    sample_size=len(period_data),
-                    r_squared=getattr(model_result, 'rsquared', np.nan),
-                    additional_stats={
-                        'period_start': start_date,
-                        'period_end': end_date,
-                        'f_statistic': getattr(model_result, 'fvalue', np.nan)
-                    }
-                )
-                
-            except Exception as e:
-                warnings.warn(f"Error in temporal robustness test for {period_name}: {str(e)}")
-                continue
-        
-        self.results['temporal_robustness'] = results
-        return results
     
     def identification_robustness_test(self,
                                      iv_model_func: Callable,

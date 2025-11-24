@@ -72,30 +72,64 @@ class InvestmentImpactConfig:
 class ChannelDecompositionResults:
     """Results from channel decomposition analysis"""
     
-    # Interest rate channel results
+    # Step 1: Channel effects (QE → channels)
+    rate_channel_beta: float = 0.0  # βr: Effect of QE on interest rates
+    rate_channel_se: float = 0.0
+    rate_channel_pvalue: float = 1.0
+    
+    distortion_channel_beta: float = 0.0  # βD: Effect of QE on distortions
+    distortion_channel_se: float = 0.0
+    distortion_channel_pvalue: float = 1.0
+    
+    # Step 2: Investment responses (channels → investment)
+    investment_rate_response: Dict[int, float] = None  # ρh by horizon
+    investment_distortion_response: Dict[int, float] = None  # κh by horizon
+    
+    # Step 3: Decomposed effects
+    rate_contributions: Dict[int, float] = None  # ψ^rate_h by horizon
+    distortion_contributions: Dict[int, float] = None  # ψ^dist_h by horizon
+    total_effects: Dict[int, float] = None  # ψh by horizon
+    
+    # Step 4: Channel shares
+    distortion_share: float = 0.0  # Target: 0.65
+    rate_share: float = 0.0  # Target: 0.35
+    cumulative_effect_12q: float = 0.0  # Target: -2.7 pp
+    
+    # Validation
+    shares_sum_to_one: bool = False  # distortion_share + rate_share ≈ 1
+    distortion_dominates: bool = False  # distortion_share > rate_share
+    meets_target_shares: bool = False  # Within ±5% of targets
+    
+    # Legacy fields (for backward compatibility)
     interest_rate_effect: float = 0.0
     interest_rate_se: float = 0.0
     interest_rate_pvalue: float = 1.0
-    
-    # Market distortion channel results
     distortion_effect: float = 0.0
     distortion_se: float = 0.0
     distortion_pvalue: float = 1.0
-    
-    # Dominance test results
     distortion_dominance: bool = False
     dominance_test_stat: float = 0.0
     dominance_pvalue: float = 1.0
-    
-    # Decomposition statistics
     total_effect: float = 0.0
-    distortion_share: float = 0.0
     interest_rate_share: float = 0.0
     
     # Model diagnostics
     r_squared: float = 0.0
     observations: int = 0
     fitted: bool = False
+    
+    def __post_init__(self):
+        """Initialize mutable default values"""
+        if self.investment_rate_response is None:
+            self.investment_rate_response = {}
+        if self.investment_distortion_response is None:
+            self.investment_distortion_response = {}
+        if self.rate_contributions is None:
+            self.rate_contributions = {}
+        if self.distortion_contributions is None:
+            self.distortion_contributions = {}
+        if self.total_effects is None:
+            self.total_effects = {}
 
 
 @dataclass
@@ -111,6 +145,13 @@ class InvestmentImpactResults:
     long_term_effect: float = 0.0
     long_term_se: float = 0.0
     long_term_pvalue: float = 1.0
+    
+    # Cumulative effects (Σ(h=0 to H) ψ_h)
+    cumulative_effect: float = 0.0
+    cumulative_se: float = 0.0
+    cumulative_lower_ci: float = 0.0
+    cumulative_upper_ci: float = 0.0
+    cumulative_horizons: int = 0
     
     # Impulse response function
     impulse_responses: pd.DataFrame = field(default_factory=pd.DataFrame)
@@ -441,9 +482,32 @@ class InvestmentImpactAnalyzer:
         distortions_aligned = market_distortions.loc[common_dates]
         rates_aligned = interest_rates.loc[common_dates]
         
-        # Prepare control variables
+        # Validate and prepare control variables (Requirement 6.4)
         if controls is not None:
+            # Validate controls type
+            if not isinstance(controls, (pd.DataFrame, pd.Series)):
+                raise TypeError("controls must be a pandas DataFrame or Series")
+            
+            # Check for missing values in controls
+            if isinstance(controls, pd.DataFrame):
+                if controls.isnull().any().any():
+                    n_missing = controls.isnull().sum().sum()
+                    raise ValueError(f"Controls contain {n_missing} missing values. "
+                                   "Please handle missing values before analysis.")
+            else:
+                if controls.isnull().any():
+                    raise ValueError("Controls contain missing values. "
+                                   "Please handle missing values before analysis.")
+            
+            # Align controls to common dates
             controls_aligned = controls.loc[common_dates]
+            
+            # Verify alignment worked correctly
+            if len(controls_aligned) != len(common_dates):
+                raise ValueError(f"Controls alignment failed: expected {len(common_dates)} "
+                               f"observations but got {len(controls_aligned)}")
+            
+            # Combine with built-in controls
             control_df = pd.DataFrame({
                 'market_distortions': distortions_aligned,
                 'interest_rates': rates_aligned
@@ -454,6 +518,12 @@ class InvestmentImpactAnalyzer:
                 'market_distortions': distortions_aligned,
                 'interest_rates': rates_aligned
             })
+        
+        # Final validation: ensure control_df has no missing values
+        if control_df.isnull().any().any():
+            n_missing = control_df.isnull().sum().sum()
+            raise ValueError(f"Control DataFrame contains {n_missing} missing values after alignment. "
+                           "This may indicate data quality issues.")
         
         try:
             # Fit Local Projections model
@@ -516,6 +586,27 @@ class InvestmentImpactAnalyzer:
                 if len(impulse_responses) > self.config.long_term_horizon:
                     results.long_term_effect = np.mean(impulse_responses[self.config.long_term_horizon:])
                     results.long_term_se = np.std(impulse_responses[self.config.long_term_horizon:]) / np.sqrt(len(impulse_responses) - self.config.long_term_horizon)
+                
+                # Calculate cumulative effect using LocalProjections method
+                try:
+                    cumulative_results = self.local_projections.compute_cumulative_effect(
+                        shock_idx=1,  # QE shock is first variable after constant
+                        max_horizon=self.config.long_term_horizon  # Use long_term_horizon (default 12 quarters)
+                    )
+                    
+                    results.cumulative_effect = cumulative_results['cumulative_effect']
+                    results.cumulative_se = cumulative_results['cumulative_se']
+                    results.cumulative_lower_ci = cumulative_results['cumulative_lower_ci']
+                    results.cumulative_upper_ci = cumulative_results['cumulative_upper_ci']
+                    results.cumulative_horizons = cumulative_results['horizons_included']
+                    
+                    self.logger.info(f"Cumulative effect over {results.cumulative_horizons} quarters: "
+                                   f"{results.cumulative_effect:.4f} [{results.cumulative_lower_ci:.4f}, "
+                                   f"{results.cumulative_upper_ci:.4f}]")
+                except Exception as e:
+                    self.logger.warning(f"Could not compute cumulative effect: {e}")
+                    results.cumulative_effect = 0.0
+                    results.cumulative_se = 0.0
                 
                 # Store local projections results
                 results.local_projections_results = {
@@ -604,7 +695,148 @@ class InvestmentImpactAnalyzer:
                            market_distortions: pd.Series,
                            interest_rates: pd.Series) -> ChannelDecompositionResults:
         """
-        Decompose QE effects into interest rate and market distortion channels
+        Decompose QE effects into interest rate and market distortion channels.
+        
+        This method now uses the StructuralChannelDecomposer for rigorous
+        two-step structural decomposition following Requirements 7.1-7.7.
+        
+        Args:
+            investment: Private investment series
+            qe_intensity: QE intensity measure (used as QE shocks)
+            market_distortions: Market distortion proxy
+            interest_rates: Interest rate proxy
+            
+        Returns:
+            ChannelDecompositionResults object
+            
+        Requirements: 7.7
+        """
+        self.logger.info("Decomposing transmission channels using structural decomposition")
+        
+        results = ChannelDecompositionResults()
+        
+        try:
+            # Import the new decomposer
+            from qeir.analysis.channel_decomposition import (
+                StructuralChannelDecomposer,
+                ChannelDecompositionConfig
+            )
+            
+            # Prepare investment growth
+            investment_growth = investment.pct_change().dropna()
+            
+            # Align all series
+            common_idx = investment_growth.index.intersection(qe_intensity.index)\
+                                                .intersection(market_distortions.index)\
+                                                .intersection(interest_rates.index)
+            
+            if len(common_idx) < 10:
+                raise ValueError("Insufficient data for channel decomposition")
+            
+            investment_growth_aligned = investment_growth.loc[common_idx]
+            qe_aligned = qe_intensity.loc[common_idx]
+            distortions_aligned = market_distortions.loc[common_idx]
+            rates_aligned = interest_rates.loc[common_idx]
+            
+            # Create decomposer with configuration
+            config = ChannelDecompositionConfig(
+                max_horizon=self.config.max_horizon,
+                use_hac_errors=True,
+                hac_lags=4
+            )
+            decomposer = StructuralChannelDecomposer(config=config)
+            
+            # Run full structural decomposition
+            decomp_results = decomposer.run_full_decomposition(
+                qe_shocks=qe_aligned,
+                interest_rates=rates_aligned,
+                distortion_index=distortions_aligned,
+                investment_growth=investment_growth_aligned,
+                controls=None
+            )
+            
+            # Extract results and populate ChannelDecompositionResults
+            channel_effects = decomp_results['channel_effects']
+            investment_responses = decomp_results['investment_responses']
+            decomposition = decomp_results['decomposition']
+            channel_shares = decomp_results['channel_shares']
+            
+            # Step 1: Channel effects
+            results.rate_channel_beta = channel_effects['rate_channel']['beta']
+            results.rate_channel_se = channel_effects['rate_channel']['se']
+            results.rate_channel_pvalue = channel_effects['rate_channel']['pvalue']
+            
+            results.distortion_channel_beta = channel_effects['distortion_channel']['beta']
+            results.distortion_channel_se = channel_effects['distortion_channel']['se']
+            results.distortion_channel_pvalue = channel_effects['distortion_channel']['pvalue']
+            
+            # Step 2: Investment responses
+            results.investment_rate_response = {
+                h: resp['rho'] for h, resp in investment_responses.items()
+            }
+            results.investment_distortion_response = {
+                h: resp['kappa'] for h, resp in investment_responses.items()
+            }
+            
+            # Step 3: Decomposed effects
+            results.rate_contributions = decomposition['rate_contributions']
+            results.distortion_contributions = decomposition['distortion_contributions']
+            results.total_effects = decomposition['total_effects']
+            
+            # Step 4: Channel shares
+            results.distortion_share = channel_shares['distortion_share']
+            results.rate_share = channel_shares['rate_share']
+            results.cumulative_effect_12q = channel_shares['cumulative_total_effect']
+            
+            # Validation flags
+            results.shares_sum_to_one = channel_shares['shares_sum_to_one']
+            results.distortion_dominates = results.distortion_share > results.rate_share
+            results.meets_target_shares = channel_shares['meets_target_shares']
+            
+            # Populate legacy fields for backward compatibility
+            results.interest_rate_effect = results.rate_channel_beta
+            results.interest_rate_se = results.rate_channel_se
+            results.interest_rate_pvalue = results.rate_channel_pvalue
+            results.distortion_effect = results.distortion_channel_beta
+            results.distortion_se = results.distortion_channel_se
+            results.distortion_pvalue = results.distortion_channel_pvalue
+            results.interest_rate_share = results.rate_share
+            results.total_effect = channel_shares['cumulative_total_effect']
+            
+            # Dominance test
+            results.distortion_dominance = results.distortion_dominates
+            
+            # Model diagnostics
+            results.observations = len(common_idx)
+            results.fitted = True
+            
+            self.logger.info(f"Structural decomposition completed: "
+                           f"Distortion={results.distortion_share:.2%}, "
+                           f"Rate={results.rate_share:.2%}")
+            
+        except ImportError as e:
+            self.logger.warning(f"Could not import StructuralChannelDecomposer, falling back to legacy method: {e}")
+            # Fall back to legacy implementation
+            results = self._decompose_channels_legacy(investment, qe_intensity, market_distortions, interest_rates)
+            
+        except Exception as e:
+            self.logger.error(f"Error in structural channel decomposition: {e}")
+            self.logger.info("Attempting legacy channel decomposition")
+            try:
+                results = self._decompose_channels_legacy(investment, qe_intensity, market_distortions, interest_rates)
+            except Exception as e2:
+                self.logger.error(f"Legacy decomposition also failed: {e2}")
+                results.fitted = False
+        
+        return results
+    
+    def _decompose_channels_legacy(self,
+                                   investment: pd.Series,
+                                   qe_intensity: pd.Series,
+                                   market_distortions: pd.Series,
+                                   interest_rates: pd.Series) -> ChannelDecompositionResults:
+        """
+        Legacy channel decomposition method (for backward compatibility).
         
         Args:
             investment: Private investment series
@@ -615,7 +847,7 @@ class InvestmentImpactAnalyzer:
         Returns:
             ChannelDecompositionResults object
         """
-        self.logger.info("Decomposing transmission channels")
+        self.logger.info("Using legacy channel decomposition method")
         
         results = ChannelDecompositionResults()
         
@@ -689,7 +921,7 @@ class InvestmentImpactAnalyzer:
                 self.logger.warning("Insufficient parameters in channel decomposition model")
                 
         except Exception as e:
-            self.logger.error(f"Error in channel decomposition: {e}")
+            self.logger.error(f"Error in legacy channel decomposition: {e}")
             results.fitted = False
         
         return results

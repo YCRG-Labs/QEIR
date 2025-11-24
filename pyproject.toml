@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "qeir"
 dynamic = ["version"]
-description = "Quantitative Easing Investment Response Analysis Framework"
+description = "Fiscal Thresholds and Market Distortions in QE Transmission"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-    {name = "QE Research Team", email = "research@example.com"},
+    {name = "QE Research Team", email = "b.yee@ycrg-labs.org"},
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -75,7 +75,7 @@ write_to = "src/qeir/_version.py"
 [tool.black]
 line-length = 88
 target-version = ['py38']
-include = '\.pyi?$'$'
+include = '\.pyi?$'
 extend-exclude = '''
 /(
   # directories

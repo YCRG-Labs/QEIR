@@ -233,3 +233,4 @@ test_import.py
 *.key
 *_key.txt
 /paper/
+/.kiro/

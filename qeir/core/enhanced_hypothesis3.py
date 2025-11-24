@@ -26,9 +26,47 @@ from statsmodels.tsa.stattools import grangercausalitytests, coint
 from statsmodels.regression.linear_model import OLS
 from statsmodels.stats.diagnostic import het_breuschpagan, het_white
 from statsmodels.stats.stattools import durbin_watson
+from functools import wraps
 
 from ..analysis.international_analysis import InternationalAnalyzer, FlowDecomposer, TransmissionTester
 from ..utils.data_structures import HypothesisData
+
+
+def deprecated(reason: str):
+    """
+    Decorator to mark classes or functions as deprecated.
+    
+    Args:
+        reason: Explanation for why the item is deprecated
+    """
+    def decorator(obj):
+        if isinstance(obj, type):
+            # Decorating a class
+            original_init = obj.__init__
+            
+            @wraps(original_init)
+            def new_init(self, *args, **kwargs):
+                warnings.warn(
+                    f"{obj.__name__} is deprecated. {reason}",
+                    category=DeprecationWarning,
+                    stacklevel=2
+                )
+                original_init(self, *args, **kwargs)
+            
+            obj.__init__ = new_init
+            return obj
+        else:
+            # Decorating a function
+            @wraps(obj)
+            def wrapper(*args, **kwargs):
+                warnings.warn(
+                    f"{obj.__name__} is deprecated. {reason}",
+                    category=DeprecationWarning,
+                    stacklevel=2
+                )
+                return obj(*args, **kwargs)
+            return wrapper
+    return decorator
 
 
 @dataclass
@@ -64,9 +102,20 @@ class InflationOffsetResults:
     policy_implications: Dict[str, Any]
 
 
+@deprecated(
+    "Hypothesis 3 (International Spillovers) has been deprecated as part of the "
+    "methodology revision. The analysis now focuses exclusively on domestic fiscal "
+    "and investment channels (Hypotheses 1 and 2). This class is preserved for "
+    "backward compatibility but should not be used in new analyses."
+)
 class ForeignBondDemandAnalyzer:
     """
     Analyzes foreign bond demand patterns and their response to QE policies.
+    
+    .. deprecated::
+        This class is deprecated as part of the QE methodology revision.
+        Hypothesis 3 (International Spillovers) is no longer part of the main
+        analysis pipeline. Use domestic-focused analyses instead.
     
     This class implements models to track foreign holdings from TIC data,
     create exchange rate models linking QE to depreciation, and test
@@ -593,9 +642,20 @@ class ForeignBondDemandAnalyzer:
         return results
 
 
+@deprecated(
+    "Hypothesis 3 (International Spillovers) has been deprecated as part of the "
+    "methodology revision. The analysis now focuses exclusively on domestic fiscal "
+    "and investment channels (Hypotheses 1 and 2). This class is preserved for "
+    "backward compatibility but should not be used in new analyses."
+)
 class CurrencyDepreciationAnalyzer:
     """
     Analyzes currency depreciation patterns in response to QE policies.
+    
+    .. deprecated::
+        This class is deprecated as part of the QE methodology revision.
+        Hypothesis 3 (International Spillovers) is no longer part of the main
+        analysis pipeline. Use domestic-focused analyses instead.
     
     This class implements exchange rate models, QE announcement effects,
     and transmission channel analysis for currency depreciation.

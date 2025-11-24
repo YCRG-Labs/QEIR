@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
 import logging
+import warnings
 from datetime import datetime
 
 # Import all enhancement components
@@ -34,9 +35,13 @@ class RevisedQEAnalyzer:
         
         Args:
             config: Optional configuration dictionary for component settings
+                - include_hypothesis3 (bool): Whether to include Hypothesis 3 analysis (default: False)
         """
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
+        
+        # Configuration flag for Hypothesis 3 (deprecated, default False)
+        self.include_hypothesis3 = self.config.get('include_hypothesis3', False)
         
         # Initialize all enhancement components
         self.temporal_corrector = TemporalScopeCorrector()
@@ -44,9 +49,23 @@ class RevisedQEAnalyzer:
         self.threshold_theory = ThresholdTheoryBuilder()
         self.channel_decomposer = ChannelDecomposer()
         self.model_diagnostics = ModelDiagnostics()
-        self.international_analyzer = InternationalAnalyzer()
-        self.flow_decomposer = FlowDecomposer()
-        self.transmission_tester = TransmissionTester()
+        
+        # Initialize Hypothesis 3 components only if explicitly requested (deprecated)
+        if self.include_hypothesis3:
+            warnings.warn(
+                "Hypothesis 3 (International Spillovers) is deprecated and should not be used "
+                "in new analyses. Set include_hypothesis3=False to suppress this warning.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            self.international_analyzer = InternationalAnalyzer()
+            self.flow_decomposer = FlowDecomposer()
+            self.transmission_tester = TransmissionTester()
+        else:
+            self.international_analyzer = None
+            self.flow_decomposer = None
+            self.transmission_tester = None
+        
         self.publication_analyzer = PublicationAnalyzer()
         self.journal_targeter = JournalTargeter()
         self.contribution_validator = ContributionValidator()
@@ -86,9 +105,13 @@ class RevisedQEAnalyzer:
         self.logger.info("Step 4: Applying technical improvements")
         technical_results = self._apply_technical_improvements(corrected_data)
         
-        # Step 5: International analysis reconciliation
-        self.logger.info("Step 5: Reconciling international results")
-        international_results = self._reconcile_international_analysis(corrected_data)
+        # Step 5: International analysis reconciliation (deprecated, skipped by default)
+        if self.include_hypothesis3:
+            self.logger.info("Step 5: Reconciling international results (deprecated)")
+            international_results = self._reconcile_international_analysis(corrected_data)
+        else:
+            self.logger.info("Step 5: Skipping international analysis (Hypothesis 3 deprecated)")
+            international_results = self._reconcile_international_analysis(corrected_data)
         
         # Step 6: Publication strategy assessment
         self.logger.info("Step 6: Assessing publication strategy")
@@ -268,7 +291,21 @@ class RevisedQEAnalyzer:
         return results
     
     def _reconcile_international_analysis(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """Reconcile international transmission results."""
+        """
+        Reconcile international transmission results.
+        
+        Note: Hypothesis 3 is deprecated. This method returns an empty dict
+        unless include_hypothesis3=True is explicitly set in config.
+        """
+        # Return empty dict if Hypothesis 3 is disabled (default behavior)
+        if not self.include_hypothesis3:
+            return {
+                'status': 'disabled',
+                'message': 'Hypothesis 3 (International Spillovers) is deprecated and disabled by default. '
+                          'Set include_hypothesis3=True in config to enable (not recommended).'
+            }
+        
+        # Legacy code path (deprecated, only runs if explicitly enabled)
         results = {}
         
         # Enhanced spillover analysis

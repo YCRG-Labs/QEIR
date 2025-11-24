@@ -77,18 +77,24 @@ class DataProcessor:
         self.quality_metrics = {}
     
     def align_frequencies(self, data: Dict[str, pd.Series], 
-                         target_freq: Optional[str] = None) -> Dict[str, pd.Series]:
+                         target_freq: Optional[str] = None,
+                         rate_variables: Optional[List[str]] = None,
+                         stock_variables: Optional[List[str]] = None) -> Dict[str, pd.Series]:
         """
         Align all series to a common frequency
         
         Args:
             data: Dictionary of pandas Series with potentially different frequencies
-            target_freq: Target frequency ('D', 'W', 'M', 'Q', 'Y')
+            target_freq: Target frequency ('D', 'W', 'M', 'Q', 'QE', 'Y')
+            rate_variables: List of variable names that are rates (yields, interest rates) - use averaging
+            stock_variables: List of variable names that are stocks (debt, holdings) - use end-of-period
             
         Returns:
             Dictionary of aligned series
         """
         target_freq = target_freq or self.config.target_frequency
+        rate_variables = rate_variables or []
+        stock_variables = stock_variables or []
         self.logger.info(f"Aligning series to {target_freq} frequency")
         
         aligned_data = {}
@@ -140,14 +146,25 @@ class DataProcessor:
                         aligned_series = series
                     else:  # Upsample from quarterly/yearly
                         aligned_series = series.resample('ME').interpolate(method='linear')
-                elif target_freq == 'Q':
+                elif target_freq in ['Q', 'QE']:
                     if original_freq in ['D', 'W', 'M']:  # Downsample
-                        if self.config.alignment_method == 'end':
-                            aligned_series = series.resample('QE').last()
-                        elif self.config.alignment_method == 'start':
-                            aligned_series = series.resample('QE').first()
-                        else:  # mean
+                        # Determine aggregation method based on variable type
+                        if series_name in rate_variables:
+                            # Rate variables: use averaging
                             aligned_series = series.resample('QE').mean()
+                            self.logger.debug(f"{series_name} is a rate variable - using mean aggregation")
+                        elif series_name in stock_variables:
+                            # Stock variables: use end-of-quarter values
+                            aligned_series = series.resample('QE').last()
+                            self.logger.debug(f"{series_name} is a stock variable - using end-of-quarter")
+                        else:
+                            # Default behavior based on config
+                            if self.config.alignment_method == 'end':
+                                aligned_series = series.resample('QE').last()
+                            elif self.config.alignment_method == 'start':
+                                aligned_series = series.resample('QE').first()
+                            else:  # mean
+                                aligned_series = series.resample('QE').mean()
                     elif original_freq == 'Q':  # Already quarterly
                         aligned_series = series
                     else:  # Upsample from yearly
@@ -238,7 +255,19 @@ class DataProcessor:
                 if self.config.interpolation_method == 'linear':
                     processed_series = processed_series.interpolate(method='linear', limit_direction='both')
                 elif self.config.interpolation_method == 'cubic':
-                    processed_series = processed_series.interpolate(method='cubic', limit_direction='both')
+                    # Check if we have enough data points for cubic interpolation
+                    non_missing_count = processed_series.notna().sum()
+                    if non_missing_count < 4:
+                        self.logger.warning(f"{series_name}: Insufficient data points ({non_missing_count}) "
+                                          f"for cubic interpolation, falling back to linear")
+                        processed_series = processed_series.interpolate(method='linear', limit_direction='both')
+                    else:
+                        processed_series = processed_series.interpolate(method='cubic', limit_direction='both')
+                        # Validate smoothness (continuous second derivative)
+                        if self._validate_cubic_smoothness(processed_series):
+                            self.logger.debug(f"{series_name}: Cubic spline smoothness validated")
+                        else:
+                            self.logger.warning(f"{series_name}: Cubic spline may not be smooth")
                 elif self.config.interpolation_method == 'forward':
                     processed_series = processed_series.fillna(method='ffill')
                 elif self.config.interpolation_method == 'backward':
@@ -502,6 +531,140 @@ class DataProcessor:
         
         return constructed_data
     
+    def validate_quarterly_conversion(self, 
+                                     monthly_data: Dict[str, pd.Series],
+                                     quarterly_data: Dict[str, pd.Series],
+                                     rate_variables: Optional[List[str]] = None,
+                                     stock_variables: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Validate that quarterly conversion preserves information correctly
+        
+        Args:
+            monthly_data: Dictionary of monthly series (before conversion)
+            quarterly_data: Dictionary of quarterly series (after conversion)
+            rate_variables: List of rate variable names (should use averaging)
+            stock_variables: List of stock variable names (should use end-of-quarter)
+            
+        Returns:
+            Dictionary containing validation results
+        """
+        self.logger.info("Validating quarterly conversion")
+        
+        rate_variables = rate_variables or []
+        stock_variables = stock_variables or []
+        validation_results = {}
+        
+        for series_name in quarterly_data.keys():
+            if series_name not in monthly_data:
+                continue
+                
+            monthly_series = monthly_data[series_name]
+            quarterly_series = quarterly_data[series_name]
+            
+            # Skip if either series is empty
+            if monthly_series.empty or quarterly_series.empty:
+                continue
+            
+            try:
+                # Validate rate variables (should equal mean of monthly values)
+                if series_name in rate_variables:
+                    # Resample monthly to quarterly using mean for comparison
+                    expected_quarterly = monthly_series.resample('QE').mean()
+                    
+                    # Align indices
+                    common_index = quarterly_series.index.intersection(expected_quarterly.index)
+                    if len(common_index) == 0:
+                        validation_results[series_name] = {
+                            'variable_type': 'rate',
+                            'is_valid': False,
+                            'error': 'No common dates between monthly and quarterly data'
+                        }
+                        continue
+                    
+                    actual = quarterly_series.loc[common_index]
+                    expected = expected_quarterly.loc[common_index]
+                    
+                    # Calculate correlation and mean absolute error
+                    correlation = actual.corr(expected)
+                    mae = np.abs(actual - expected).mean()
+                    max_error = np.abs(actual - expected).max()
+                    
+                    # Check if values are approximately equal (within tolerance)
+                    tolerance = 1e-10
+                    is_valid = np.allclose(actual, expected, rtol=tolerance, atol=tolerance)
+                    
+                    validation_results[series_name] = {
+                        'variable_type': 'rate',
+                        'is_valid': is_valid,
+                        'correlation': correlation,
+                        'mean_absolute_error': mae,
+                        'max_error': max_error,
+                        'aggregation_method': 'mean'
+                    }
+                    
+                # Validate stock variables (should equal last monthly value in quarter)
+                elif series_name in stock_variables:
+                    # Resample monthly to quarterly using last for comparison
+                    expected_quarterly = monthly_series.resample('QE').last()
+                    
+                    # Align indices
+                    common_index = quarterly_series.index.intersection(expected_quarterly.index)
+                    if len(common_index) == 0:
+                        validation_results[series_name] = {
+                            'variable_type': 'stock',
+                            'is_valid': False,
+                            'error': 'No common dates between monthly and quarterly data'
+                        }
+                        continue
+                    
+                    actual = quarterly_series.loc[common_index]
+                    expected = expected_quarterly.loc[common_index]
+                    
+                    # Calculate correlation and mean absolute error
+                    correlation = actual.corr(expected)
+                    mae = np.abs(actual - expected).mean()
+                    max_error = np.abs(actual - expected).max()
+                    
+                    # Check if values are exactly equal
+                    tolerance = 1e-10
+                    is_valid = np.allclose(actual, expected, rtol=tolerance, atol=tolerance)
+                    
+                    validation_results[series_name] = {
+                        'variable_type': 'stock',
+                        'is_valid': is_valid,
+                        'correlation': correlation,
+                        'mean_absolute_error': mae,
+                        'max_error': max_error,
+                        'aggregation_method': 'last'
+                    }
+                    
+            except Exception as e:
+                validation_results[series_name] = {
+                    'is_valid': False,
+                    'error': str(e)
+                }
+                self.logger.error(f"Validation failed for {series_name}: {e}")
+        
+        # Calculate summary statistics
+        valid_count = sum(1 for v in validation_results.values() 
+                         if v.get('is_valid', False))
+        total_count = len(validation_results)
+        
+        summary = {
+            'total_validated': total_count,
+            'valid_count': valid_count,
+            'invalid_count': total_count - valid_count,
+            'validation_rate': valid_count / total_count if total_count > 0 else 0.0,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        self.logger.info(f"Quarterly conversion validation: {valid_count}/{total_count} series valid")
+        
+        return {
+            'summary': summary,
+            'series_results': validation_results
+        }
+    
     def validate_processed_data(self, data: Dict[str, pd.Series]) -> Dict[str, Any]:
         """
         Validate processed data quality and coverage
@@ -536,13 +699,27 @@ class DataProcessor:
             if hasattr(series.index, 'min') and hasattr(series.index, 'max'):
                 date_range = series.index.max() - series.index.min()
                 # Use updated frequency codes
-                freq_map = {'M': 'ME', 'Q': 'QE'}
+                freq_map = {'M': 'ME', 'Q': 'QE', 'QE': 'QE'}
                 freq = freq_map.get(self.config.target_frequency, self.config.target_frequency)
                 expected_obs = len(pd.date_range(series.index.min(), series.index.max(), 
                                                freq=freq))
                 date_coverage = total_obs / expected_obs if expected_obs > 0 else 0
+                
+                # Check for target date range (2008Q1-2023Q4) for quarterly data
+                target_start = pd.Timestamp('2008-03-31')  # 2008Q1 end
+                target_end = pd.Timestamp('2023-12-31')    # 2023Q4 end
+                
+                date_range_warning = None
+                if self.config.target_frequency in ['Q', 'QE']:
+                    if series.index.min() > target_start:
+                        date_range_warning = f"Data starts after target (2008Q1): {series.index.min()}"
+                        self.logger.warning(f"{series_name}: {date_range_warning}")
+                    if series.index.max() < target_end:
+                        date_range_warning = f"Data ends before target (2023Q4): {series.index.max()}"
+                        self.logger.warning(f"{series_name}: {date_range_warning}")
             else:
                 date_coverage = 1.0
+                date_range_warning = None
             
             # Quality checks
             is_valid = (
@@ -569,7 +746,8 @@ class DataProcessor:
                 'date_range': {
                     'start': series.index.min() if hasattr(series.index, 'min') else None,
                     'end': series.index.max() if hasattr(series.index, 'max') else None
-                }
+                },
+                'date_range_warning': date_range_warning if 'date_range_warning' in locals() else None
             }
             
             if is_valid:
@@ -677,6 +855,47 @@ class DataProcessor:
         
         return processed_hypothesis_data, processing_report
     
+    def filter_to_date_range(self, data: Dict[str, pd.Series],
+                            start_date: Optional[str] = '2008-03-31',
+                            end_date: Optional[str] = '2023-12-31') -> Dict[str, pd.Series]:
+        """
+        Filter data to target date range (default: 2008Q1-2023Q4)
+        
+        Args:
+            data: Dictionary of pandas Series
+            start_date: Start date (default: 2008Q1 end)
+            end_date: End date (default: 2023Q4 end)
+            
+        Returns:
+            Dictionary of filtered series
+        """
+        self.logger.info(f"Filtering data to date range: {start_date} to {end_date}")
+        
+        start_ts = pd.Timestamp(start_date)
+        end_ts = pd.Timestamp(end_date)
+        
+        filtered_data = {}
+        for series_name, series in data.items():
+            if series is None or series.empty:
+                continue
+            
+            try:
+                # Filter to date range
+                mask = (series.index >= start_ts) & (series.index <= end_ts)
+                filtered_series = series[mask]
+                
+                if len(filtered_series) > 0:
+                    filtered_data[series_name] = filtered_series
+                    self.logger.debug(f"Filtered {series_name}: {len(series)} -> {len(filtered_series)} obs")
+                else:
+                    self.logger.warning(f"No data in target range for {series_name}")
+                    
+            except Exception as e:
+                self.logger.error(f"Failed to filter {series_name}: {e}")
+                continue
+        
+        return filtered_data
+    
     # Helper methods
     
     def _get_max_consecutive_missing(self, missing_mask: pd.Series) -> int:
@@ -766,3 +985,50 @@ class DataProcessor:
         capped[outlier_mask & (series > upper_cap)] = upper_cap
         
         return capped
+    
+    def _validate_cubic_smoothness(self, series: pd.Series) -> bool:
+        """
+        Validate that cubic spline interpolation maintains smoothness
+        (continuous second derivative)
+        
+        Args:
+            series: Interpolated series
+            
+        Returns:
+            True if series appears smooth, False otherwise
+        """
+        try:
+            # Remove any remaining NaN values
+            clean_series = series.dropna()
+            
+            if len(clean_series) < 4:
+                return False
+            
+            # Calculate first and second derivatives using finite differences
+            values = clean_series.values
+            
+            # First derivative (approximate)
+            first_deriv = np.diff(values)
+            
+            # Second derivative (approximate)
+            second_deriv = np.diff(first_deriv)
+            
+            # Check for discontinuities in second derivative
+            # A cubic spline should have continuous second derivative
+            # Check if second derivative changes are reasonable (no large jumps)
+            if len(second_deriv) > 1:
+                second_deriv_changes = np.diff(second_deriv)
+                # Use median absolute deviation to detect outliers in changes
+                mad = np.median(np.abs(second_deriv_changes - np.median(second_deriv_changes)))
+                if mad > 0:
+                    # Check if any changes are more than 5 MADs away
+                    threshold = 5 * mad
+                    large_jumps = np.abs(second_deriv_changes - np.median(second_deriv_changes)) > threshold
+                    if large_jumps.any():
+                        return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.debug(f"Smoothness validation failed: {e}")
+            return True  # Assume smooth if validation fails

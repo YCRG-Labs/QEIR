@@ -729,21 +729,109 @@ class LocalProjections:
     """
     Local projections method for dynamic effects (Hypothesis 2)
     Based on equation (15) from the paper
+    
+    Supports both standard and instrumented estimation:
+    - Standard: Δ^h y_{t+h} = α_h + ψ_h·shock_t + λ_h·Z_t + μ_t
+    - Instrumented: Two-stage estimation with instruments for shock variable
     """
     
     def __init__(self, max_horizon=20):
         self.max_horizon = max_horizon
         self.results = {}
         self.fitted = False
+        self.instrumented = False
+        self.first_stage_results = {}
         
-    def fit(self, y, shock, controls=None, lags=4):
+    def fit(self, y, shock, controls=None, lags=4, instruments=None, hac_lags=4):
         """
-        Fit local projections
-        y: outcome variable
-        shock: QE shock variable
-        controls: additional control variables
+        Fit local projections with optional instrumental variables
+        
+        Estimates: Δ^h y_{t+h} = α_h + ψ_h·shock_t + λ_h·Z_t + μ_t
+        for horizons h = 0 to max_horizon
+        
+        Args:
+            y: outcome variable (pd.Series)
+            shock: QE shock variable (pd.Series) - may be instrumented
+            controls: additional control variables (pd.DataFrame or pd.Series)
+                     Controls are consistently included across all horizons (Requirement 6.4)
+                     Must have same length and index as y
+                     Must not contain missing values
+            lags: number of lags to include (default 4)
+            instruments: instrument matrix for shock variable (pd.DataFrame or pd.Series)
+                        If provided, performs two-stage estimation at each horizon
+                        Must have same length and index as y
+                        Must not contain missing values
+            hac_lags: number of lags for HAC standard errors (default 4)
+            
+        Returns:
+            self (for method chaining)
+            
+        Raises:
+            TypeError: If y, shock, controls, or instruments are not pandas Series/DataFrame
+            ValueError: If controls or instruments contain missing values
+            ValueError: If controls or instruments have mismatched length with y
+            ValueError: If controls or instruments have different index than y
         """
+        # Validate inputs
+        if not isinstance(y, pd.Series):
+            raise TypeError("y must be a pandas Series")
+        
+        if not isinstance(shock, pd.Series):
+            raise TypeError("shock must be a pandas Series")
+        
+        # Validate and prepare controls
+        if controls is not None:
+            if isinstance(controls, pd.DataFrame):
+                # Check for missing values in controls
+                if controls.isnull().any().any():
+                    n_missing = controls.isnull().sum().sum()
+                    raise ValueError(f"Controls contain {n_missing} missing values. "
+                                   "Please handle missing values before fitting.")
+                
+                # Check dimensions
+                if len(controls) != len(y):
+                    raise ValueError(f"Controls length ({len(controls)}) does not match "
+                                   f"outcome variable length ({len(y)})")
+                
+                # Ensure controls have same index as y
+                if not controls.index.equals(y.index):
+                    raise ValueError("Controls must have the same index as outcome variable")
+                    
+            elif isinstance(controls, pd.Series):
+                if controls.isnull().any():
+                    raise ValueError("Controls contain missing values. "
+                                   "Please handle missing values before fitting.")
+                
+                if len(controls) != len(y):
+                    raise ValueError(f"Controls length ({len(controls)}) does not match "
+                                   f"outcome variable length ({len(y)})")
+                
+                if not controls.index.equals(y.index):
+                    raise ValueError("Controls must have the same index as outcome variable")
+            else:
+                raise TypeError("controls must be a pandas DataFrame or Series")
+        
+        # Validate instruments if provided
+        if instruments is not None:
+            if isinstance(instruments, pd.DataFrame):
+                if instruments.isnull().any().any():
+                    raise ValueError("Instruments contain missing values")
+                if len(instruments) != len(y):
+                    raise ValueError(f"Instruments length ({len(instruments)}) does not match "
+                                   f"outcome variable length ({len(y)})")
+            elif isinstance(instruments, pd.Series):
+                if instruments.isnull().any():
+                    raise ValueError("Instruments contain missing values")
+                if len(instruments) != len(y):
+                    raise ValueError(f"Instruments length ({len(instruments)}) does not match "
+                                   f"outcome variable length ({len(y)})")
+            else:
+                raise TypeError("instruments must be a pandas DataFrame or Series")
+        
         self.results = {}
+        self.first_stage_results = {}
+        self.instrumented = instruments is not None
+        self.hac_lags = hac_lags
         
         for h in range(self.max_horizon + 1):
             # Create dependent variable: y_{t+h} - y_{t-1}
@@ -766,23 +854,79 @@ class LocalProjections:
                         X_reg.append(controls[col])
                 else:
                     X_reg.append(controls)
+            
+            # Combine data
+            if self.instrumented:
+                # For IV estimation, also include instruments
+                if isinstance(instruments, pd.DataFrame):
+                    inst_list = [instruments[col] for col in instruments.columns]
+                else:
+                    inst_list = [instruments]
                     
-            # Combine and drop NaN
-            reg_data = pd.concat([y_diff] + X_reg, axis=1).dropna()
+                reg_data = pd.concat([y_diff] + X_reg + inst_list, axis=1).dropna()
+                n_instruments = len(inst_list)
+            else:
+                reg_data = pd.concat([y_diff] + X_reg, axis=1).dropna()
+                n_instruments = 0
             
             if len(reg_data) > 10:  # Minimum observations
                 y_reg = reg_data.iloc[:, 0]
-                X_reg_clean = sm.add_constant(reg_data.iloc[:, 1:])
                 
-                try:
-                    model = OLS(y_reg, X_reg_clean).fit()
-                    self.results[h] = model
-                except:
-                    self.results[h] = None
+                if self.instrumented:
+                    # Two-stage estimation
+                    # First stage: regress shock on instruments and controls
+                    shock_col = reg_data.iloc[:, 1]
+                    controls_cols = reg_data.iloc[:, 2:-(n_instruments)] if len(X_reg) > 1 else None
+                    instruments_cols = reg_data.iloc[:, -n_instruments:]
+                    
+                    # Build first stage regressors: instruments + controls
+                    if controls_cols is not None and len(controls_cols.columns) > 0:
+                        first_stage_X = pd.concat([instruments_cols, controls_cols], axis=1)
+                    else:
+                        first_stage_X = instruments_cols
+                    
+                    first_stage_X = sm.add_constant(first_stage_X)
+                    
+                    try:
+                        # First stage regression
+                        first_stage_model = OLS(shock_col, first_stage_X).fit(cov_type='HAC', cov_kwds={'maxlags': hac_lags})
+                        self.first_stage_results[h] = first_stage_model
+                        
+                        # Get fitted values from first stage
+                        shock_fitted = first_stage_model.fittedvalues
+                        
+                        # Second stage: use fitted shock values
+                        if controls_cols is not None and len(controls_cols.columns) > 0:
+                            second_stage_X = pd.concat([pd.Series(shock_fitted, index=shock_col.index), 
+                                                       controls_cols], axis=1)
+                        else:
+                            second_stage_X = pd.DataFrame(shock_fitted, index=shock_col.index)
+                        
+                        second_stage_X = sm.add_constant(second_stage_X)
+                        
+                        # Second stage with HAC standard errors
+                        model = OLS(y_reg, second_stage_X).fit(cov_type='HAC', cov_kwds={'maxlags': hac_lags})
+                        self.results[h] = model
+                        
+                    except Exception as e:
+                        self.results[h] = None
+                        self.first_stage_results[h] = None
+                else:
+                    # Standard OLS with HAC standard errors
+                    X_reg_clean = sm.add_constant(reg_data.iloc[:, 1:])
+                    
+                    try:
+                        model = OLS(y_reg, X_reg_clean).fit(cov_type='HAC', cov_kwds={'maxlags': hac_lags})
+                        self.results[h] = model
+                    except:
+                        self.results[h] = None
             else:
                 self.results[h] = None
+                if self.instrumented:
+                    self.first_stage_results[h] = None
                 
         self.fitted = True
+        return self
         
     def get_impulse_responses(self, shock_idx=1):
         """Extract impulse response coefficients and confidence intervals"""
@@ -948,6 +1092,115 @@ class LocalProjections:
             'lower_ci_nw': nw_lower_ci,
             'upper_ci_nw': nw_upper_ci
         })
+    
+    def get_first_stage_statistics(self):
+        """
+        Get first-stage F-statistics for instrumented estimation
+        
+        Returns:
+            pd.DataFrame: First-stage statistics by horizon including F-stat, p-value, partial R²
+            
+        Raises:
+            ValueError: If model was not fitted with instruments
+        """
+        if not self.fitted:
+            raise ValueError("Model not fitted")
+        
+        if not self.instrumented:
+            raise ValueError("Model was not fitted with instruments. Use instruments parameter in fit().")
+        
+        from scipy import stats as scipy_stats
+        
+        horizons = []
+        f_stats = []
+        p_values = []
+        partial_r2 = []
+        
+        for h in range(self.max_horizon + 1):
+            if self.first_stage_results.get(h) is not None:
+                fs_model = self.first_stage_results[h]
+                
+                horizons.append(h)
+                
+                # Calculate F-statistic manually to avoid issues with HAC covariance
+                # F = (R² / k) / ((1 - R²) / (n - k - 1))
+                # where k is number of regressors (excluding constant)
+                r2 = fs_model.rsquared
+                n = fs_model.nobs
+                k = fs_model.df_model  # Number of regressors excluding constant
+                
+                if k > 0 and n > k + 1:
+                    f_stat = (r2 / k) / ((1 - r2) / (n - k - 1))
+                    p_value = 1 - scipy_stats.f.cdf(f_stat, k, n - k - 1)
+                else:
+                    f_stat = 0.0
+                    p_value = 1.0
+                
+                f_stats.append(f_stat)
+                p_values.append(p_value)
+                
+                # Calculate partial R-squared (R² from first stage)
+                partial_r2.append(r2)
+        
+        return pd.DataFrame({
+            'horizon': horizons,
+            'first_stage_f_stat': f_stats,
+            'first_stage_p_value': p_values,
+            'partial_r_squared': partial_r2
+        })
+    
+    def compute_cumulative_effect(self, shock_idx=1, max_horizon=None):
+        """
+        Compute cumulative effect over horizons: Σ(h=0 to H) ψ_h
+        
+        Args:
+            shock_idx: Index of shock variable in regression (default 1, after constant)
+            max_horizon: Maximum horizon for cumulation (default: self.max_horizon)
+            
+        Returns:
+            dict: Cumulative effect, standard error, and confidence interval
+        """
+        if not self.fitted:
+            raise ValueError("Model not fitted")
+        
+        if max_horizon is None:
+            max_horizon = self.max_horizon
+        
+        # Collect coefficients and standard errors
+        coefficients = []
+        std_errors = []
+        
+        for h in range(max_horizon + 1):
+            if self.results.get(h) is not None:
+                model = self.results[h]
+                if len(model.params) > shock_idx:
+                    coefficients.append(model.params.iloc[shock_idx])
+                    std_errors.append(model.bse.iloc[shock_idx])
+                else:
+                    coefficients.append(0.0)
+                    std_errors.append(0.0)
+            else:
+                coefficients.append(0.0)
+                std_errors.append(0.0)
+        
+        # Cumulative effect
+        cumulative_effect = np.sum(coefficients)
+        
+        # Standard error of sum (assuming independence across horizons - conservative)
+        cumulative_se = np.sqrt(np.sum(np.array(std_errors)**2))
+        
+        # 95% confidence interval
+        cumulative_lower = cumulative_effect - 1.96 * cumulative_se
+        cumulative_upper = cumulative_effect + 1.96 * cumulative_se
+        
+        return {
+            'cumulative_effect': cumulative_effect,
+            'cumulative_se': cumulative_se,
+            'cumulative_lower_ci': cumulative_lower,
+            'cumulative_upper_ci': cumulative_upper,
+            'horizons_included': max_horizon + 1,
+            'coefficients_by_horizon': coefficients
+        }
     
     def multiple_horizon_specifications(self, y, shock, controls=None, horizon_sets=None):
         """

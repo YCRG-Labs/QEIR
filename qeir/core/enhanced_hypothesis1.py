@@ -722,8 +722,9 @@ class Hypothesis1ThresholdDetector:
                 'transition_matrix': var_model.transition_matrix.tolist() if var_model.transition_matrix is not None else None
             }
         
-        return diagnostics    def 
-sequential_threshold_test(self,
+        return diagnostics
+    
+    def sequential_threshold_test(self,
                                 y: np.ndarray,
                                 X: np.ndarray,
                                 threshold_var: np.ndarray,
@@ -927,3 +928,402 @@ sequential_threshold_test(self,
                 'spurious_threshold': False,
                 'error': str(e)
             }
+
+
+class InstrumentedThresholdRegression(EnhancedHansenThresholdRegression):
+    """
+    Instrumented threshold regression for causal QE effects with fiscal regimes.
+    
+    Extends EnhancedHansenThresholdRegression to support:
+    - First-differenced dependent variables (yield changes)
+    - Instrumented treatment variables (QE shocks from HF identification)
+    - Two-stage estimation with first-stage diagnostics
+    - Regime-specific effect estimation with attenuation calculation
+    
+    This class implements the revised methodology for Hypothesis 1 with rigorous
+    external instrument identification following Swanson (2021).
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self.first_stage_results = None
+        self.first_stage_f_stat = None
+        self.first_stage_partial_r2 = None
+        self.instrument_valid = False
+        self.regime_effects = None
+        self.attenuation_pct = None
+        
+    def fit_with_instruments(self,
+                           y_diff: np.ndarray,
+                           qe_shocks: np.ndarray,
+                           instruments: np.ndarray,
+                           controls: np.ndarray,
+                           threshold_var: np.ndarray,
+                           trim: float = 0.15) -> Dict[str, Any]:
+        """
+        Fit instrumented threshold regression model.
+        
+        Model:
+        Δyt = β1·QEt + δ1·Xt + εt,  if Ft ≤ τ (low fiscal stress)
+        Δyt = β2·QEt + δ2·Xt + εt,  if Ft > τ (high fiscal stress)
+        
+        Where QEt is instrumented using high-frequency FOMC surprises.
+        
+        Args:
+            y_diff: First-differenced yields (Δyt)
+            qe_shocks: QE shocks to be instrumented
+            instruments: High-frequency FOMC surprises (external instruments)
+            controls: Macroeconomic control variables (GDP growth, unemployment, inflation)
+            threshold_var: Fiscal indicator (debt-to-GDP or debt service burden)
+            trim: Fraction of observations to trim when searching for threshold
+            
+        Returns:
+            Dictionary with estimation results including first-stage F-statistics
+        """
+        # Validate inputs
+        n_obs = len(y_diff)
+        if len(qe_shocks) != n_obs or len(instruments) != n_obs or len(threshold_var) != n_obs:
+            raise ValueError("All input arrays must have the same length")
+        
+        if controls.ndim == 1:
+            controls = controls.reshape(-1, 1)
+        
+        if len(controls) != n_obs:
+            raise ValueError("Controls must have the same length as other inputs")
+        
+        # Step 1: Compute first-stage statistics
+        first_stage_stats = self.compute_first_stage_statistics(
+            qe_shocks, instruments, controls
+        )
+        
+        self.first_stage_results = first_stage_stats
+        self.first_stage_f_stat = first_stage_stats['f_statistic']
+        self.first_stage_partial_r2 = first_stage_stats['partial_r2']
+        self.instrument_valid = first_stage_stats['instrument_valid']
+        
+        # Warn if instruments are weak
+        if not self.instrument_valid:
+            warnings.warn(
+                f"Weak instruments detected: F-statistic = {self.first_stage_f_stat:.2f} < 10. "
+                "Results may be unreliable.",
+                UserWarning
+            )
+        
+        # Step 2: Perform first-stage regression to get fitted QE shocks
+        # First stage: QEt = α + γ·Zt + δ·Xt + εt
+        # where Zt are instruments and Xt are controls
+        X_first_stage = np.column_stack([np.ones(n_obs), instruments, controls])
+        
+        try:
+            first_stage_model = OLS(qe_shocks, X_first_stage).fit()
+            qe_shocks_fitted = first_stage_model.predict(X_first_stage)
+        except Exception as e:
+            raise ValueError(f"First-stage regression failed: {str(e)}")
+        
+        # Step 3: Perform threshold regression using fitted QE shocks
+        # Combine fitted QE shocks with controls for second stage
+        X_second_stage = np.column_stack([qe_shocks_fitted, controls])
+        
+        # Use parent class fit method for threshold search
+        self.fit(y_diff, X_second_stage, threshold_var, trim)
+        
+        # Step 4: Estimate regime-specific effects
+        if self.fitted:
+            regime_effects = self.estimate_regime_specific_effects(
+                threshold_var <= self.threshold
+            )
+            self.regime_effects = regime_effects
+        
+        # Compile results
+        results = {
+            'fitted': self.fitted,
+            'threshold': self.threshold,
+            'first_stage_f_stat': self.first_stage_f_stat,
+            'first_stage_partial_r2': self.first_stage_partial_r2,
+            'instrument_valid': self.instrument_valid,
+            'regime1_qe_effect': self.regime_effects['regime1_qe_effect'] if self.regime_effects else None,
+            'regime2_qe_effect': self.regime_effects['regime2_qe_effect'] if self.regime_effects else None,
+            'attenuation_pct': self.regime_effects['attenuation_pct'] if self.regime_effects else None,
+            'regime1_observations': int(np.sum(threshold_var <= self.threshold)) if self.fitted else 0,
+            'regime2_observations': int(np.sum(threshold_var > self.threshold)) if self.fitted else 0
+        }
+        
+        return results
+    
+    def compute_first_stage_statistics(self,
+                                      qe_shocks: np.ndarray,
+                                      instruments: np.ndarray,
+                                      controls: np.ndarray) -> Dict[str, float]:
+        """
+        Compute first-stage F-statistics for instrument validity.
+        
+        Tests the strength of instruments in predicting the endogenous QE shocks.
+        Following Stock and Yogo (2005), F > 10 indicates strong instruments.
+        
+        Args:
+            qe_shocks: Endogenous QE shocks
+            instruments: High-frequency FOMC surprises
+            controls: Control variables
+            
+        Returns:
+            Dictionary with F-statistic, p-value, and partial R-squared
+        """
+        n_obs = len(qe_shocks)
+        
+        # Ensure instruments and controls are 2D
+        if instruments.ndim == 1:
+            instruments = instruments.reshape(-1, 1)
+        if controls.ndim == 1:
+            controls = controls.reshape(-1, 1)
+        
+        # First stage: QEt = α + γ·Zt + δ·Xt + εt
+        X_with_instruments = np.column_stack([np.ones(n_obs), instruments, controls])
+        X_without_instruments = np.column_stack([np.ones(n_obs), controls])
+        
+        try:
+            # Unrestricted model (with instruments)
+            model_unrestricted = OLS(qe_shocks, X_with_instruments).fit()
+            ssr_unrestricted = model_unrestricted.ssr
+            r2_unrestricted = model_unrestricted.rsquared
+            
+            # Restricted model (without instruments)
+            model_restricted = OLS(qe_shocks, X_without_instruments).fit()
+            ssr_restricted = model_restricted.ssr
+            r2_restricted = model_restricted.rsquared
+            
+            # Calculate F-statistic for excluded instruments
+            # F = [(SSR_r - SSR_ur) / q] / [SSR_ur / (n - k)]
+            # where q = number of instruments, k = total parameters in unrestricted model
+            n_instruments = instruments.shape[1]
+            n_params_unrestricted = X_with_instruments.shape[1]
+            
+            numerator = (ssr_restricted - ssr_unrestricted) / n_instruments
+            denominator = ssr_unrestricted / (n_obs - n_params_unrestricted)
+            
+            f_statistic = numerator / denominator if denominator > 0 else 0.0
+            
+            # Calculate p-value
+            from scipy.stats import f as f_dist
+            p_value = 1 - f_dist.cdf(f_statistic, n_instruments, n_obs - n_params_unrestricted)
+            
+            # Partial R-squared: incremental R² from adding instruments
+            partial_r2 = r2_unrestricted - r2_restricted
+            
+            # Instrument validity: F > 10 (Stock-Yogo threshold)
+            instrument_valid = f_statistic > 10.0
+            
+            return {
+                'f_statistic': float(f_statistic),
+                'p_value': float(p_value),
+                'partial_r2': float(partial_r2),
+                'r2_unrestricted': float(r2_unrestricted),
+                'r2_restricted': float(r2_restricted),
+                'instrument_valid': bool(instrument_valid),
+                'n_instruments': int(n_instruments),
+                'n_observations': int(n_obs)
+            }
+            
+        except Exception as e:
+            warnings.warn(f"First-stage statistics computation failed: {str(e)}")
+            return {
+                'f_statistic': 0.0,
+                'p_value': 1.0,
+                'partial_r2': 0.0,
+                'r2_unrestricted': 0.0,
+                'r2_restricted': 0.0,
+                'instrument_valid': False,
+                'n_instruments': 0,
+                'n_observations': int(n_obs),
+                'error': str(e)
+            }
+    
+    def estimate_regime_specific_effects(self,
+                                        regime1_mask: np.ndarray) -> Dict[str, float]:
+        """
+        Estimate QE effects in low and high fiscal regimes.
+        
+        Extracts the QE shock coefficients from each regime and computes
+        the attenuation percentage: (β1 - β2) / β1 × 100
+        
+        Args:
+            regime1_mask: Boolean mask for regime 1 (low fiscal stress)
+            
+        Returns:
+            Dictionary with regime-specific effects and attenuation
+        """
+        if not self.fitted:
+            raise ValueError("Model must be fitted before estimating regime effects")
+        
+        # Extract QE coefficients (first coefficient after intercept)
+        # beta1 and beta2 have structure: [intercept, qe_effect, control1, control2, ...]
+        regime1_qe_effect = self.beta1[1]  # QE coefficient in regime 1
+        regime2_qe_effect = self.beta2[1]  # QE coefficient in regime 2
+        
+        regime1_qe_se = self.se1[1]  # Standard error in regime 1
+        regime2_qe_se = self.se2[1]  # Standard error in regime 2
+        
+        # Calculate attenuation percentage
+        if regime1_qe_effect != 0:
+            attenuation_pct = ((regime1_qe_effect - regime2_qe_effect) / regime1_qe_effect) * 100
+        else:
+            attenuation_pct = 0.0
+        
+        # Test significance of regime difference
+        # H0: β1 = β2
+        coeff_diff = regime1_qe_effect - regime2_qe_effect
+        se_diff = np.sqrt(regime1_qe_se**2 + regime2_qe_se**2)  # Assuming independence
+        
+        if se_diff > 0:
+            t_stat_diff = coeff_diff / se_diff
+            
+            # Degrees of freedom (approximate)
+            n1 = np.sum(regime1_mask)
+            n2 = np.sum(~regime1_mask)
+            df = n1 + n2 - 2 * len(self.beta1)  # Total obs - total params
+            
+            from scipy.stats import t
+            p_value_diff = 2 * (1 - t.cdf(abs(t_stat_diff), df)) if df > 0 else 1.0
+            significant_difference = p_value_diff < 0.05
+        else:
+            t_stat_diff = 0.0
+            p_value_diff = 1.0
+            significant_difference = False
+        
+        return {
+            'regime1_qe_effect': float(regime1_qe_effect),
+            'regime1_qe_se': float(regime1_qe_se),
+            'regime2_qe_effect': float(regime2_qe_effect),
+            'regime2_qe_se': float(regime2_qe_se),
+            'attenuation_pct': float(attenuation_pct),
+            'coefficient_difference': float(coeff_diff),
+            'difference_se': float(se_diff),
+            'difference_t_stat': float(t_stat_diff),
+            'difference_p_value': float(p_value_diff),
+            'significant_difference': bool(significant_difference)
+        }
+    
+    def bootstrap_confidence_intervals(self,
+                                      y_diff: np.ndarray,
+                                      qe_shocks: np.ndarray,
+                                      instruments: np.ndarray,
+                                      controls: np.ndarray,
+                                      threshold_var: np.ndarray,
+                                      n_bootstrap: int = 1000,
+                                      confidence_level: float = 0.95,
+                                      trim: float = 0.15) -> Dict[str, Any]:
+        """
+        Calculate bootstrap confidence intervals for instrumented threshold model.
+        
+        Bootstraps both stages of estimation to account for uncertainty in
+        both the first-stage and threshold identification.
+        
+        Args:
+            y_diff: First-differenced yields
+            qe_shocks: QE shocks
+            instruments: High-frequency FOMC surprises
+            controls: Control variables
+            threshold_var: Fiscal indicator
+            n_bootstrap: Number of bootstrap iterations
+            confidence_level: Confidence level (default 0.95)
+            trim: Trim parameter for threshold search
+            
+        Returns:
+            Dictionary with bootstrap confidence intervals
+        """
+        if not self.fitted:
+            raise ValueError("Model must be fitted before calculating bootstrap confidence intervals")
+        
+        n_obs = len(y_diff)
+        bootstrap_thresholds = []
+        bootstrap_regime1_effects = []
+        bootstrap_regime2_effects = []
+        bootstrap_attenuations = []
+        bootstrap_f_stats = []
+        
+        for i in range(n_bootstrap):
+            # Bootstrap sample with replacement
+            indices = resample(range(n_obs), n_samples=n_obs, random_state=i)
+            
+            y_boot = y_diff[indices]
+            qe_boot = qe_shocks[indices]
+            inst_boot = instruments[indices]
+            ctrl_boot = controls[indices]
+            thresh_boot = threshold_var[indices]
+            
+            try:
+                # Fit instrumented threshold model on bootstrap sample
+                boot_model = InstrumentedThresholdRegression()
+                boot_results = boot_model.fit_with_instruments(
+                    y_boot, qe_boot, inst_boot, ctrl_boot, thresh_boot, trim
+                )
+                
+                if boot_results['fitted']:
+                    bootstrap_thresholds.append(boot_results['threshold'])
+                    bootstrap_regime1_effects.append(boot_results['regime1_qe_effect'])
+                    bootstrap_regime2_effects.append(boot_results['regime2_qe_effect'])
+                    bootstrap_attenuations.append(boot_results['attenuation_pct'])
+                    bootstrap_f_stats.append(boot_results['first_stage_f_stat'])
+                    
+            except Exception:
+                # Skip failed bootstrap iterations
+                continue
+        
+        if len(bootstrap_thresholds) < 50:
+            warnings.warn(
+                f"Only {len(bootstrap_thresholds)} successful bootstrap iterations. "
+                "Confidence intervals may be unreliable."
+            )
+        
+        # Calculate confidence intervals
+        alpha = 1 - confidence_level
+        lower_percentile = (alpha / 2) * 100
+        upper_percentile = (1 - alpha / 2) * 100
+        
+        threshold_ci = np.percentile(bootstrap_thresholds, [lower_percentile, upper_percentile])
+        regime1_ci = np.percentile(bootstrap_regime1_effects, [lower_percentile, upper_percentile])
+        regime2_ci = np.percentile(bootstrap_regime2_effects, [lower_percentile, upper_percentile])
+        attenuation_ci = np.percentile(bootstrap_attenuations, [lower_percentile, upper_percentile])
+        
+        # Check if point estimate falls within CI
+        threshold_in_ci = threshold_ci[0] <= self.threshold <= threshold_ci[1]
+        
+        results = {
+            'n_successful_bootstrap': len(bootstrap_thresholds),
+            'n_total_bootstrap': n_bootstrap,
+            'confidence_level': confidence_level,
+            'threshold_ci': {
+                'lower': float(threshold_ci[0]),
+                'upper': float(threshold_ci[1]),
+                'point_estimate': float(self.threshold),
+                'point_in_ci': bool(threshold_in_ci)
+            },
+            'regime1_effect_ci': {
+                'lower': float(regime1_ci[0]),
+                'upper': float(regime1_ci[1]),
+                'point_estimate': float(self.regime_effects['regime1_qe_effect'])
+            },
+            'regime2_effect_ci': {
+                'lower': float(regime2_ci[0]),
+                'upper': float(regime2_ci[1]),
+                'point_estimate': float(self.regime_effects['regime2_qe_effect'])
+            },
+            'attenuation_ci': {
+                'lower': float(attenuation_ci[0]),
+                'upper': float(attenuation_ci[1]),
+                'point_estimate': float(self.regime_effects['attenuation_pct'])
+            },
+            'first_stage_f_stats': {
+                'mean': float(np.mean(bootstrap_f_stats)),
+                'std': float(np.std(bootstrap_f_stats)),
+                'min': float(np.min(bootstrap_f_stats)),
+                'max': float(np.max(bootstrap_f_stats))
+            },
+            'bootstrap_distributions': {
+                'thresholds': bootstrap_thresholds,
+                'regime1_effects': bootstrap_regime1_effects,
+                'regime2_effects': bootstrap_regime2_effects,
+                'attenuations': bootstrap_attenuations
+            }
+        }
+        
+        return results
