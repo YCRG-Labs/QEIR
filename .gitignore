@@ -232,5 +232,3 @@ test_import.py
 .env
 *.key
 *_key.txt
-/paper/
-/.kiro/
