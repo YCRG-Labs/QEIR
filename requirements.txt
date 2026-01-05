@@ -31,7 +31,6 @@ bokeh>=2.4.0
 # Testing and quality assurance
 pytest>=7.0.0
 pytest-cov>=4.0.0
-hypothesis>=6.0.0
 
 # Documentation
 sphinx>=4.0.0

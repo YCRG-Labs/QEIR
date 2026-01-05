@@ -1,0 +1,74 @@
+{
+  "batch_processing": {
+    "max_concurrent_jobs": 4,
+    "max_concurrent_hypotheses": 2,
+    "job_timeout_minutes": 120,
+    "retry_delay_minutes": 5,
+    "memory_limit_gb": 8.0,
+    "cpu_limit_percent": 80.0,
+    "disk_space_limit_gb": 10.0,
+    "base_output_directory": "batch_results",
+    "compress_results": true,
+    "cleanup_intermediate_files": true,
+    "enable_progress_monitoring": true,
+    "log_level": "INFO",
+    "save_job_logs": true,
+    "enable_scheduling": false,
+    "schedule_check_interval_minutes": 1,
+    "enable_notifications": false,
+    "notification_email": null,
+    "notification_webhook": null
+  },
+  "base_config": {
+    "confidence_level": 0.95,
+    "bootstrap_iterations": 1000,
+    "enable_robustness_tests": true,
+    "generate_publication_outputs": true,
+    "save_intermediate_results": true
+  },
+  "periods": [
+    ["2008-01-01", "2015-12-31"],
+    ["2016-01-01", "2023-12-31"],
+    ["2008-01-01", "2023-12-31"]
+  ],
+  "specifications": ["default", "alternative_confidence", "alternative_investment"],
+  "specifications_config": {
+    "default": {
+      "h1_confidence_proxy": "consumer_confidence",
+      "h2_investment_measure": "private_fixed_investment",
+      "h3_exchange_rate_measure": "trade_weighted_dollar"
+    },
+    "alternative_confidence": {
+      "h1_confidence_proxy": "financial_stress_index",
+      "h2_investment_measure": "private_fixed_investment",
+      "h3_exchange_rate_measure": "trade_weighted_dollar"
+    },
+    "alternative_investment": {
+      "h1_confidence_proxy": "consumer_confidence",
+      "h2_investment_measure": "equipment_investment",
+      "h3_exchange_rate_measure": "eur_usd_rate"
+    }
+  },
+  "scheduled_jobs": [
+    {
+      "job_name": "monthly_full_analysis",
+      "schedule": "monthly",
+      "config": {
+        "start_date": "2008-01-01",
+        "end_date": "2023-12-31",
+        "enable_robustness_tests": true,
+        "hypotheses_to_test": [1, 2, 3]
+      }
+    },
+    {
+      "job_name": "weekly_hypothesis1_update",
+      "schedule": "weekly",
+      "config": {
+        "start_date": "2020-01-01",
+        "end_date": "2023-12-31",
+        "enable_robustness_tests": false,
+        "hypotheses_to_test": [1]
+      }
+    }
+  ]
+}

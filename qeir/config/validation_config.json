@@ -1,0 +1,131 @@
+{
+  "validation_settings": {
+    "literature_benchmarks": {
+      "hypothesis1": {
+        "threshold_range": [0.02, 0.08],
+        "confidence_effect_magnitude": [-0.15, -0.05],
+        "reaction_strength_range": [0.1, 0.4],
+        "yield_reversal_magnitude": [0.01, 0.05],
+        "significance_threshold": 0.05,
+        "economic_significance_threshold": 0.01
+      },
+      "hypothesis2": {
+        "investment_decline_range": [-0.08, -0.02],
+        "distortion_dominance_threshold": 0.6,
+        "qe_intensity_threshold": 0.15,
+        "channel_decomposition_ratio": [0.3, 0.7],
+        "significance_threshold": 0.05,
+        "economic_significance_threshold": 0.02
+      },
+      "hypothesis3": {
+        "foreign_demand_decline": [-0.12, -0.04],
+        "currency_depreciation_range": [0.02, 0.08],
+        "inflation_offset_range": [0.01, 0.04],
+        "spillover_significance_threshold": 0.05,
+        "economic_significance_threshold": 0.005
+      }
+    },
+    "validation_criteria": {
+      "overall_validity_threshold": 0.8,
+      "robustness_threshold": 0.7,
+      "literature_consistency_threshold": 0.6,
+      "publication_readiness_threshold": 0.75
+    },
+    "robustness_testing": {
+      "specification_tests": [
+        "alternative_functional_forms",
+        "variable_selection_robustness",
+        "lag_length_sensitivity",
+        "outlier_treatment"
+      ],
+      "temporal_tests": [
+        "subsample_stability",
+        "rolling_window_analysis",
+        "crisis_period_robustness",
+        "structural_break_tests"
+      ],
+      "methodological_tests": [
+        "statistical_ml_comparison",
+        "ensemble_consistency",
+        "cross_validation_stability",
+        "bootstrap_robustness"
+      ],
+      "sensitivity_tests": [
+        "parameter_sensitivity",
+        "data_quality_impact",
+        "outlier_influence",
+        "assumption_violations"
+      ]
+    },
+    "output_settings": {
+      "generate_latex_tables": true,
+      "generate_publication_figures": true,
+      "create_diagnostic_plots": true,
+      "generate_robustness_appendix": true,
+      "create_executive_summary": true,
+      "save_intermediate_results": true
+    },
+    "data_validation": {
+      "minimum_observations": 100,
+      "maximum_missing_percentage": 0.1,
+      "outlier_detection_method": "iqr",
+      "outlier_threshold": 3.0,
+      "data_quality_threshold": 0.8
+    }
+  },
+  "literature_references": {
+    "hypothesis1_references": [
+      "Bernanke, B. S. (2022). 21st Century Monetary Policy",
+      "Krishnamurthy, A., & Vissing-Jorgensen, A. (2011). The effects of quantitative easing on interest rates",
+      "Gagnon, J., et al. (2011). The financial market effects of the Federal Reserve's large-scale asset purchases"
+    ],
+    "hypothesis2_references": [
+      "Chakraborty, I., Goldstein, I., & MacKinlay, A. (2018). Housing price booms and crowding-out effects",
+      "Di Maggio, M., Kermani, A., & Palmer, C. J. (2020). How quantitative easing works: Evidence on the refinancing channel",
+      "Rodnyansky, A., & Darmouni, O. M. (2017). The effects of quantitative easing on bank lending behavior"
+    ],
+    "hypothesis3_references": [
+      "Chen, Q., Filardo, A., He, D., & Zhu, F. (2016). Financial crisis, US unconventional monetary policy and international spillovers",
+      "Fratzscher, M., Lo Duca, M., & Straub, R. (2018). On the international spillovers of US quantitative easing",
+      "Bowman, D., Londono, J. M., & Sapriza, H. (2015). US unconventional monetary policy and transmission to emerging market economies"
+    ]
+  },
+  "validation_methodology": {
+    "economic_theory_validation": {
+      "description": "Validate results against established economic theory and mechanisms",
+      "criteria": [
+        "theoretical_consistency",
+        "mechanism_plausibility",
+        "magnitude_reasonableness",
+        "timing_consistency"
+      ]
+    },
+    "statistical_validation": {
+      "description": "Ensure statistical rigor and validity of empirical results",
+      "criteria": [
+        "significance_testing",
+        "confidence_intervals",
+        "model_diagnostics",
+        "specification_tests"
+      ]
+    },
+    "literature_comparison": {
+      "description": "Compare findings with existing literature and explain deviations",
+      "criteria": [
+        "magnitude_comparison",
+        "sign_consistency",
+        "mechanism_agreement",
+        "novel_contributions"
+      ]
+    },
+    "robustness_validation": {
+      "description": "Test robustness across specifications, methods, and time periods",
+      "criteria": [
+        "specification_robustness",
+        "temporal_stability",
+        "methodological_consistency",
+        "sensitivity_analysis"
+      ]
+    }
+  }
+}

@@ -214,12 +214,12 @@ def save_metadata(output_dir: Path, metadata: Dict) -> None:
 # Data Acquisition Functions
 # =============================================================================
 
-def fetch_macro_data(client: FREDClient, start_date: str, 
-                     end_date: str) -> Optional[pd.DataFrame]:
+def fetch_all_fred_data(client: FREDClient, start_date: str, 
+                        end_date: str) -> Optional[pd.DataFrame]:
     """
-    Fetch macroeconomic data for thresholds analysis.
+    Fetch all FRED data series needed for thresholds analysis.
     
-    Requirements: 5.1, 5.3, 5.4 - Fetch DGS10, GPDIC1, GDPC1, UNRATE, PCEPILFE
+    Requirements: 5.1, 5.2, 5.3, 5.4, 7.1 - Fetch all required FRED series
     
     Args:
         client: FREDClient instance
@@ -227,83 +227,43 @@ def fetch_macro_data(client: FREDClient, start_date: str,
         end_date: End date (YYYY-MM-DD)
         
     Returns:
-        DataFrame with macro variables, or None if all fetches failed
+        DataFrame with all FRED data series, or None if all fetches failed
     """
-    series_map = {
-        'DGS10': 'treasury_10y_yield',      # 10-year Treasury yield (daily)
-        'GPDIC1': 'real_private_investment', # Real private fixed investment
-        'GDPC1': 'real_gdp',                 # Real GDP
-        'UNRATE': 'unemployment_rate',       # Unemployment rate
-        'PCEPILFE': 'core_pce_inflation'     # Core PCE inflation
+    # Define all series to fetch
+    series_config = {
+        'DGS10': {'name': 'treasury_10y_yield', 'frequency': 'd'},
+        'GPDIC1': {'name': 'real_private_investment', 'frequency': 'q'},
+        'GDPC1': {'name': 'real_gdp', 'frequency': 'q'},
+        'UNRATE': {'name': 'unemployment_rate', 'frequency': 'q'},
+        'PCEPILFE': {'name': 'core_pce_inflation', 'frequency': 'q'},
+        'A091RC1Q027SBEA': {'name': 'interest_payments', 'frequency': 'q'},
+        'FGRECPT': {'name': 'federal_revenue', 'frequency': 'q'},
+        'VIXCLS': {'name': 'vix', 'frequency': 'd'},
+        'TEDRATE': {'name': 'ted_spread', 'frequency': 'd'}
     }
     
     data = {}
-    for series_id, col_name in series_map.items():
-        # Use quarterly frequency for macro variables, daily for yields
-        freq = 'd' if series_id == 'DGS10' else 'q'
-        series = client.fetch_series(series_id, start_date, end_date, frequency=freq)
+    successful_fetches = 0
+    
+    for series_id, config in series_config.items():
+        series = client.fetch_series(
+            series_id, start_date, end_date, 
+            frequency=config['frequency']
+        )
         if series is not None:
-            data[col_name] = series
+            data[config['name']] = series
+            successful_fetches += 1
+        else:
+            logger.warning(f"Failed to fetch {series_id} ({config['name']})")
     
-    if not data:
-        logger.error("Failed to fetch any macro data")
+    if successful_fetches == 0:
+        logger.error("Failed to fetch any FRED data")
         return None
     
-    # Combine into DataFrame - will have mixed frequencies
+    # Combine into DataFrame
     df = pd.DataFrame(data)
-    return df
-
-
-def fetch_treasury_yields_daily(client: FREDClient, start_date: str,
-                                 end_date: str) -> Optional[pd.Series]:
-    """
-    Fetch 10-year Treasury constant maturity yields at daily frequency.
     
-    Requirements: 5.1 - Fetch DGS10 at daily frequency
-    
-    Args:
-        client: FREDClient instance
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        
-    Returns:
-        Series with daily yields, or None if failed
-    """
-    yields = client.fetch_series('DGS10', start_date, end_date, frequency='d')
-    if yields is not None:
-        yields.name = 'treasury_10y_yield'
-    return yields
-
-
-def fetch_debt_service_data(client: FREDClient, start_date: str,
-                            end_date: str) -> Optional[pd.DataFrame]:
-    """
-    Fetch federal debt service and revenue data.
-    
-    Requirements: 5.2 - Fetch data to compute debt-service-to-revenue ratio
-    
-    Args:
-        client: FREDClient instance
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        
-    Returns:
-        DataFrame with interest payments and revenue, or None if failed
-    """
-    # A091RC1Q027SBEA: Federal government interest payments
-    interest = client.fetch_series('A091RC1Q027SBEA', start_date, end_date, frequency='q')
-    
-    # FGRECPT: Federal government current receipts
-    revenue = client.fetch_series('FGRECPT', start_date, end_date, frequency='q')
-    
-    if interest is None and revenue is None:
-        logger.error("Failed to fetch any debt service data")
-        return None
-    
-    df = pd.DataFrame({
-        'interest_payments': interest,
-        'federal_revenue': revenue
-    })
+    logger.info(f"Successfully fetched {successful_fetches}/{len(series_config)} FRED series")
     
     return df
 
@@ -335,90 +295,7 @@ def compute_debt_service_ratio(interest: pd.Series,
     return ratio
 
 
-def fetch_distortion_proxies(client: FREDClient, start_date: str,
-                             end_date: str) -> Optional[pd.DataFrame]:
-    """
-    Fetch market distortion proxy data (VIX and TED spread).
-    
-    Requirements: 7.1 - Use available FRED proxies for distortion index
-    
-    Args:
-        client: FREDClient instance
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        
-    Returns:
-        DataFrame with VIX and TED spread, or None if failed
-    """
-    # VIXCLS: CBOE Volatility Index
-    vix = client.fetch_series('VIXCLS', start_date, end_date, frequency='d')
-    
-    # TEDRATE: TED Spread (3-month LIBOR - 3-month T-bill)
-    ted = client.fetch_series('TEDRATE', start_date, end_date, frequency='d')
-    
-    if vix is None and ted is None:
-        logger.error("Failed to fetch any distortion proxy data")
-        return None
-    
-    df = pd.DataFrame({
-        'vix': vix,
-        'ted_spread': ted
-    })
-    
-    return df
 
-
-def fetch_investment_data(client: FREDClient, start_date: str,
-                          end_date: str) -> Optional[pd.Series]:
-    """
-    Fetch real private fixed investment data.
-    
-    Requirements: 5.3 - Fetch GPDIC1 for investment analysis
-    
-    Args:
-        client: FREDClient instance
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        
-    Returns:
-        Series with real private fixed investment, or None if failed
-    """
-    investment = client.fetch_series('GPDIC1', start_date, end_date, frequency='q')
-    if investment is not None:
-        investment.name = 'real_private_investment'
-    return investment
-
-
-def fetch_macro_controls(client: FREDClient, start_date: str,
-                         end_date: str) -> Optional[pd.DataFrame]:
-    """
-    Fetch macroeconomic control variables.
-    
-    Requirements: 5.4 - Fetch GDPC1, UNRATE, PCEPILFE
-    
-    Args:
-        client: FREDClient instance
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        
-    Returns:
-        DataFrame with macro controls, or None if failed
-    """
-    gdp = client.fetch_series('GDPC1', start_date, end_date, frequency='q')
-    unrate = client.fetch_series('UNRATE', start_date, end_date, frequency='q')
-    inflation = client.fetch_series('PCEPILFE', start_date, end_date, frequency='q')
-    
-    if gdp is None and unrate is None and inflation is None:
-        logger.error("Failed to fetch any macro control data")
-        return None
-    
-    df = pd.DataFrame({
-        'real_gdp': gdp,
-        'unemployment_rate': unrate,
-        'core_pce_inflation': inflation
-    })
-    
-    return df
 
 
 
@@ -1185,25 +1062,30 @@ def generate_table2(threshold_result: ThresholdResult,
     Returns:
         DataFrame formatted as Table 2
     """
-    # Get QE effect coefficient from each regime
+    # Get QE effect coefficient from each regime (check multiple possible names)
     qe_coef_low = threshold_result.coef_low.get('qe_shock', 
-                   threshold_result.coef_low.get('qe_shock_quarterly', np.nan))
+                   threshold_result.coef_low.get('qe_shock_std',
+                   threshold_result.coef_low.get('qe_shock_quarterly', np.nan)))
     qe_coef_high = threshold_result.coef_high.get('qe_shock',
-                    threshold_result.coef_high.get('qe_shock_quarterly', np.nan))
+                    threshold_result.coef_high.get('qe_shock_std',
+                    threshold_result.coef_high.get('qe_shock_quarterly', np.nan)))
     
     qe_se_low = threshold_result.se_low.get('qe_shock',
-                 threshold_result.se_low.get('qe_shock_quarterly', np.nan))
+                 threshold_result.se_low.get('qe_shock_std',
+                 threshold_result.se_low.get('qe_shock_quarterly', np.nan)))
     qe_se_high = threshold_result.se_high.get('qe_shock',
-                  threshold_result.se_high.get('qe_shock_quarterly', np.nan))
+                  threshold_result.se_high.get('qe_shock_std',
+                  threshold_result.se_high.get('qe_shock_quarterly', np.nan)))
     
+    # Note: coefficients are already in basis points if y was scaled by 100
     rows = [
         {
             'regime': 'Low-Debt',
             'threshold': threshold_result.threshold,
-            'qe_effect_bps': qe_coef_low * 100 if not np.isnan(qe_coef_low) else np.nan,
-            'std_error': qe_se_low * 100 if not np.isnan(qe_se_low) else np.nan,
-            'ci_lower': (qe_coef_low - 1.96 * qe_se_low) * 100 if not np.isnan(qe_coef_low) else np.nan,
-            'ci_upper': (qe_coef_low + 1.96 * qe_se_low) * 100 if not np.isnan(qe_coef_low) else np.nan,
+            'qe_effect_bps': qe_coef_low if not np.isnan(qe_coef_low) else np.nan,
+            'std_error': qe_se_low if not np.isnan(qe_se_low) else np.nan,
+            'ci_lower': (qe_coef_low - 1.96 * qe_se_low) if not np.isnan(qe_coef_low) else np.nan,
+            'ci_upper': (qe_coef_low + 1.96 * qe_se_low) if not np.isnan(qe_coef_low) else np.nan,
             'r_squared': threshold_result.r_squared_low,
             'n_obs': threshold_result.n_obs_low,
             'hansen_pvalue': threshold_result.bootstrap_pvalue,
@@ -1213,10 +1095,10 @@ def generate_table2(threshold_result: ThresholdResult,
         {
             'regime': 'High-Debt',
             'threshold': threshold_result.threshold,
-            'qe_effect_bps': qe_coef_high * 100 if not np.isnan(qe_coef_high) else np.nan,
-            'std_error': qe_se_high * 100 if not np.isnan(qe_se_high) else np.nan,
-            'ci_lower': (qe_coef_high - 1.96 * qe_se_high) * 100 if not np.isnan(qe_coef_high) else np.nan,
-            'ci_upper': (qe_coef_high + 1.96 * qe_se_high) * 100 if not np.isnan(qe_coef_high) else np.nan,
+            'qe_effect_bps': qe_coef_high if not np.isnan(qe_coef_high) else np.nan,
+            'std_error': qe_se_high if not np.isnan(qe_se_high) else np.nan,
+            'ci_lower': (qe_coef_high - 1.96 * qe_se_high) if not np.isnan(qe_coef_high) else np.nan,
+            'ci_upper': (qe_coef_high + 1.96 * qe_se_high) if not np.isnan(qe_coef_high) else np.nan,
             'r_squared': threshold_result.r_squared_high,
             'n_obs': threshold_result.n_obs_high,
             'hansen_pvalue': threshold_result.bootstrap_pvalue,
@@ -1386,49 +1268,39 @@ def main(output_dir: Optional[str] = None,
     generated_files = []
     
     # -------------------------------------------------------------------------
-    # Step 1: Fetch Data
+    # Step 1: Fetch All FRED Data
     # -------------------------------------------------------------------------
-    logger.info("\n--- Step 1: Fetching Data ---")
+    logger.info("\n--- Step 1: Fetching All FRED Data ---")
     
-    # Fetch daily Treasury yields
-    yields_daily = fetch_treasury_yields_daily(client, start_date, end_date)
-    if yields_daily is not None:
-        yields_daily.to_csv(output_path / "raw_yields_daily.csv")
-        logger.info(f"Saved daily yields: {len(yields_daily)} observations")
-        generated_files.append("raw_yields_daily.csv")
-    
-    # Fetch debt service data
-    debt_data = fetch_debt_service_data(client, start_date, end_date)
-    if debt_data is not None:
-        save_dataframe(debt_data, output_path / "raw_debt_service.csv", "Debt service data")
-        generated_files.append("raw_debt_service.csv")
-    
-    # Fetch investment data
-    investment = fetch_investment_data(client, start_date, end_date)
-    if investment is not None:
-        investment.to_csv(output_path / "raw_investment.csv")
-        logger.info(f"Saved investment data: {len(investment)} observations")
-        generated_files.append("raw_investment.csv")
-    
-    # Fetch macro controls
-    controls = fetch_macro_controls(client, start_date, end_date)
-    if controls is not None:
-        save_dataframe(controls, output_path / "raw_macro_controls.csv", "Macro controls")
-        generated_files.append("raw_macro_controls.csv")
-    
-    # Fetch distortion proxies
-    distortion_data = fetch_distortion_proxies(client, start_date, end_date)
-    if distortion_data is not None:
-        save_dataframe(distortion_data, output_path / "raw_distortion_proxies.csv", 
-                      "Distortion proxies")
-        generated_files.append("raw_distortion_proxies.csv")
+    # Fetch all FRED data in one consolidated DataFrame
+    fred_data = fetch_all_fred_data(client, start_date, end_date)
+    if fred_data is not None:
+        save_dataframe(fred_data, output_path / "fred_data_all.csv", "All FRED data")
+        generated_files.append("fred_data_all.csv")
+        
+        # Extract individual components for analysis
+        yields_daily = fred_data['treasury_10y_yield'].dropna()
+        investment = fred_data['real_private_investment'].dropna()
+        controls = fred_data[['real_gdp', 'unemployment_rate', 'core_pce_inflation']].dropna(how='all')
+        debt_data = fred_data[['interest_payments', 'federal_revenue']].dropna(how='all')
+        distortion_data = fred_data[['vix', 'ted_spread']].dropna(how='all')
+        
+        logger.info(f"Extracted data components:")
+        logger.info(f"  Daily yields: {len(yields_daily)} observations")
+        logger.info(f"  Investment: {len(investment)} observations")
+        logger.info(f"  Macro controls: {len(controls)} observations")
+        logger.info(f"  Debt service data: {len(debt_data)} observations")
+        logger.info(f"  Distortion proxies: {len(distortion_data)} observations")
+    else:
+        logger.error("Failed to fetch FRED data - cannot proceed")
+        sys.exit(1)
     
     # -------------------------------------------------------------------------
     # Step 2: Compute Debt Service Ratio
     # -------------------------------------------------------------------------
     logger.info("\n--- Step 2: Computing Debt Service Ratio ---")
     
-    if debt_data is not None:
+    if len(debt_data) > 0:
         debt_ratio = compute_debt_service_ratio(
             debt_data['interest_payments'],
             debt_data['federal_revenue']
@@ -1447,7 +1319,7 @@ def main(output_dir: Optional[str] = None,
     
     fomc_dates = get_fomc_dates(int(start_date[:4]), int(end_date[:4]))
     
-    if yields_daily is not None:
+    if len(yields_daily) > 0:
         proxy_shocks = construct_proxy_shocks(yields_daily, fomc_dates)
         proxy_shocks.to_csv(output_path / "proxy_shocks_daily.csv")
         generated_files.append("proxy_shocks_daily.csv")
@@ -1495,13 +1367,16 @@ def main(output_dir: Optional[str] = None,
     logger.info("\n--- Step 5: Estimating Threshold Regression ---")
     
     threshold_result = None
-    if (investment is not None and quarterly_shocks is not None and 
+    if (yields_daily is not None and quarterly_shocks is not None and 
         debt_ratio is not None):
         try:
             # Prepare data for threshold regression
-            # Align all series to quarterly frequency with consistent period end dates
-            inv_quarterly = investment.copy()
-            inv_quarterly.index = pd.to_datetime(inv_quarterly.index).to_period('Q').to_timestamp('Q')
+            # Per paper Eq. 5: Δy_t = β·QE_t + δ·X_t + θ·C_t + ε_t
+            # where Δy_t is quarterly change in 10-year Treasury yield
+            
+            # Resample daily yields to quarterly (use end-of-quarter, not mean)
+            yields_quarterly = yields_daily.resample('QE').last()
+            yields_quarterly.index = pd.to_datetime(yields_quarterly.index).to_period('Q').to_timestamp('Q')
             
             shock_quarterly = quarterly_shocks.copy()
             shock_quarterly.index = pd.to_datetime(shock_quarterly.index).to_period('Q').to_timestamp('Q')
@@ -1509,13 +1384,43 @@ def main(output_dir: Optional[str] = None,
             debt_quarterly = debt_ratio.copy()
             debt_quarterly.index = pd.to_datetime(debt_quarterly.index).to_period('Q').to_timestamp('Q')
             
-            # Create dependent variable: log change in investment
-            y = np.log(inv_quarterly).diff().dropna()
-            y.name = 'dlog_investment'
+            # Create dependent variable: quarterly change in Treasury yield (in basis points)
+            # Multiply by 100 to convert percentage points to basis points
+            y = yields_quarterly.diff().dropna() * 100
+            y.name = 'delta_yield_bps'
             
-            # Prepare regressors
-            X = shock_quarterly.to_frame()
-            X.columns = ['qe_shock']
+            # Standardize the QE shock for interpretation
+            # NOTE: Flip sign so positive shock = QE easing (yield-lowering)
+            # The raw shock is yield change, so negative = easing. We flip to match
+            # the paper's convention where positive QE shock should lower yields.
+            shock_std = -1 * (shock_quarterly - shock_quarterly.mean()) / shock_quarterly.std()
+            shock_std.name = 'qe_shock_std'
+            
+            # Prepare regressors per paper Eq. 5:
+            # QE_t = proxy QE shock (standardized, sign-flipped)
+            # X_t = macroeconomic controls (GDP growth, unemployment, inflation)
+            # C_t = confidence/risk sentiment (distortion index as proxy)
+            
+            # Align macro controls to quarterly
+            controls_quarterly = controls.copy()
+            controls_quarterly.index = pd.to_datetime(controls_quarterly.index).to_period('Q').to_timestamp('Q')
+            
+            # Compute GDP growth rate for X_t
+            gdp_growth = controls_quarterly['real_gdp'].pct_change() * 100
+            gdp_growth.name = 'gdp_growth'
+            
+            # Align distortion index (C_t - confidence/risk sentiment)
+            distortion_aligned = distortion_quarterly.copy()
+            distortion_aligned.index = pd.to_datetime(distortion_aligned.index).to_period('Q').to_timestamp('Q')
+            
+            # Build regressor matrix with all components from Eq. 5
+            X = pd.DataFrame({
+                'qe_shock': shock_std,                                    # QE_t (standardized)
+                'gdp_growth': gdp_growth,                                 # X_t: macro control
+                'unemployment': controls_quarterly['unemployment_rate'],  # X_t: macro control
+                'inflation': controls_quarterly['core_pce_inflation'],    # X_t: macro control
+                'confidence': distortion_aligned                          # C_t: risk sentiment
+            })
             
             # Estimate threshold regression
             threshold_result = estimate_threshold_regression(

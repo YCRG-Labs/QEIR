@@ -197,12 +197,12 @@ def save_metadata(output_dir: Path, metadata: Dict) -> None:
 # Data Acquisition Functions
 # =============================================================================
 
-def fetch_holdings_data(client: FREDClient, start_date: str, 
+def fetch_all_fred_data(client: FREDClient, start_date: str, 
                         end_date: str) -> Optional[pd.DataFrame]:
     """
-    Fetch foreign holdings of U.S. Treasury securities.
+    Fetch all FRED data series needed for international spillovers analysis.
     
-    Requirements: 1.1 - Fetch FDHBPIN (official) and FDHBFIN (private)
+    Requirements: 1.1, 1.2, 1.3, 2.1 - Fetch all required FRED series
     
     Args:
         client: FREDClient instance
@@ -210,97 +210,46 @@ def fetch_holdings_data(client: FREDClient, start_date: str,
         end_date: End date (YYYY-MM-DD)
         
     Returns:
-        DataFrame with official and private foreign holdings, or None if failed
+        DataFrame with all FRED data series, or None if all fetches failed
     """
-    official = client.fetch_series('FDHBPIN', start_date, end_date)
-    private = client.fetch_series('FDHBFIN', start_date, end_date)
+    # Define all series to fetch
+    series_config = {
+        'FDHBPIN': {'name': 'official_holdings', 'frequency': None},
+        'FDHBFIN': {'name': 'private_holdings', 'frequency': None},
+        'TREAST': {'name': 'fed_treasury_holdings', 'frequency': None},
+        'GFDEBTN': {'name': 'total_marketable_debt', 'frequency': 'q'},
+        'DTWEXBGS': {'name': 'trade_weighted_dollar', 'frequency': 'd'},
+        'DGS10': {'name': 'treasury_10y_yield', 'frequency': 'd'}
+    }
     
-    if official is None and private is None:
-        logger.error("Failed to fetch any holdings data")
+    data = {}
+    successful_fetches = 0
+    
+    for series_id, config in series_config.items():
+        series = client.fetch_series(
+            series_id, start_date, end_date, 
+            frequency=config['frequency']
+        )
+        if series is not None:
+            data[config['name']] = series
+            successful_fetches += 1
+        else:
+            logger.warning(f"Failed to fetch {series_id} ({config['name']})")
+    
+    if successful_fetches == 0:
+        logger.error("Failed to fetch any FRED data")
         return None
     
-    df = pd.DataFrame({
-        'official_holdings': official,
-        'private_holdings': private
-    })
+    # Combine into DataFrame
+    df = pd.DataFrame(data)
     
-    # Compute total holdings
-    df['total_holdings'] = df['official_holdings'].fillna(0) + df['private_holdings'].fillna(0)
+    # Compute derived variables
+    if 'official_holdings' in df.columns and 'private_holdings' in df.columns:
+        df['total_holdings'] = df['official_holdings'].fillna(0) + df['private_holdings'].fillna(0)
     
-    return df
-
-
-def fetch_fed_balance_sheet(client: FREDClient, start_date: str,
-                            end_date: str) -> Optional[pd.DataFrame]:
-    """
-    Fetch Federal Reserve Treasury holdings and total marketable debt.
-    
-    Requirements: 1.2 - Fetch TREAST and GFDEBTN (total public debt)
-    
-    Args:
-        client: FREDClient instance
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        
-    Returns:
-        DataFrame with Fed holdings and total debt, or None if failed
-    """
-    fed_holdings = client.fetch_series('TREAST', start_date, end_date)
-    # Use GFDEBTN (Total Public Debt) as proxy for marketable debt
-    total_debt = client.fetch_series('GFDEBTN', start_date, end_date, frequency='q')
-    
-    if fed_holdings is None and total_debt is None:
-        logger.error("Failed to fetch any balance sheet data")
-        return None
-    
-    df = pd.DataFrame({
-        'fed_treasury_holdings': fed_holdings,
-        'total_marketable_debt': total_debt
-    })
+    logger.info(f"Successfully fetched {successful_fetches}/{len(series_config)} FRED series")
     
     return df
-
-
-def fetch_fx_data(client: FREDClient, start_date: str,
-                  end_date: str) -> Optional[pd.Series]:
-    """
-    Fetch trade-weighted U.S. dollar index.
-    
-    Requirements: 1.3 - Fetch DTWEXBGS
-    
-    Args:
-        client: FREDClient instance
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        
-    Returns:
-        Series with dollar index, or None if failed
-    """
-    fx = client.fetch_series('DTWEXBGS', start_date, end_date, frequency='d')
-    if fx is not None:
-        fx.name = 'trade_weighted_dollar'
-    return fx
-
-
-def fetch_treasury_yields(client: FREDClient, start_date: str,
-                          end_date: str) -> Optional[pd.Series]:
-    """
-    Fetch 10-year Treasury constant maturity yields at daily frequency.
-    
-    Requirements: 2.1 - Use daily changes in 10-year Treasury yields
-    
-    Args:
-        client: FREDClient instance
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        
-    Returns:
-        Series with daily yields, or None if failed
-    """
-    yields = client.fetch_series('DGS10', start_date, end_date, frequency='d')
-    if yields is not None:
-        yields.name = 'treasury_10y_yield'
-    return yields
 
 
 def compute_qe_intensity(fed_holdings: pd.Series, 
@@ -723,36 +672,30 @@ def main(output_dir: Optional[str] = None,
     generated_files = []
     
     # -------------------------------------------------------------------------
-    # Step 1: Fetch Data
+    # Step 1: Fetch All FRED Data
     # -------------------------------------------------------------------------
-    logger.info("\n--- Step 1: Fetching Data ---")
+    logger.info("\n--- Step 1: Fetching All FRED Data ---")
     
-    # Fetch holdings data
-    holdings = fetch_holdings_data(client, start_date, end_date)
-    if holdings is not None:
-        save_dataframe(holdings, output_path / "raw_holdings.csv", "Holdings data")
-        generated_files.append("raw_holdings.csv")
-    
-    # Fetch Fed balance sheet data
-    balance_sheet = fetch_fed_balance_sheet(client, start_date, end_date)
-    if balance_sheet is not None:
-        save_dataframe(balance_sheet, output_path / "raw_balance_sheet.csv", 
-                      "Balance sheet data")
-        generated_files.append("raw_balance_sheet.csv")
-    
-    # Fetch FX data
-    fx = fetch_fx_data(client, start_date, end_date)
-    if fx is not None:
-        fx.to_csv(output_path / "raw_fx.csv")
-        logger.info(f"Saved FX data: {len(fx)} observations")
-        generated_files.append("raw_fx.csv")
-    
-    # Fetch Treasury yields
-    yields = fetch_treasury_yields(client, start_date, end_date)
-    if yields is not None:
-        yields.to_csv(output_path / "raw_yields.csv")
-        logger.info(f"Saved yields data: {len(yields)} observations")
-        generated_files.append("raw_yields.csv")
+    # Fetch all FRED data in one consolidated DataFrame
+    fred_data = fetch_all_fred_data(client, start_date, end_date)
+    if fred_data is not None:
+        save_dataframe(fred_data, output_path / "fred_data_all.csv", "All FRED data")
+        generated_files.append("fred_data_all.csv")
+        
+        # Extract individual components for analysis
+        holdings = fred_data[['official_holdings', 'private_holdings', 'total_holdings']].dropna(how='all')
+        balance_sheet = fred_data[['fed_treasury_holdings', 'total_marketable_debt']].dropna(how='all')
+        fx = fred_data['trade_weighted_dollar'].dropna()
+        yields = fred_data['treasury_10y_yield'].dropna()
+        
+        logger.info(f"Extracted data components:")
+        logger.info(f"  Holdings: {len(holdings)} observations")
+        logger.info(f"  Balance sheet: {len(balance_sheet)} observations") 
+        logger.info(f"  FX: {len(fx)} observations")
+        logger.info(f"  Yields: {len(yields)} observations")
+    else:
+        logger.error("Failed to fetch FRED data - cannot proceed")
+        sys.exit(1)
 
     
     # -------------------------------------------------------------------------
@@ -760,7 +703,7 @@ def main(output_dir: Optional[str] = None,
     # -------------------------------------------------------------------------
     logger.info("\n--- Step 2: Computing QE Intensity ---")
     
-    if balance_sheet is not None:
+    if len(balance_sheet) > 0:
         qe_intensity = compute_qe_intensity(
             balance_sheet['fed_treasury_holdings'],
             balance_sheet['total_marketable_debt']
@@ -779,7 +722,7 @@ def main(output_dir: Optional[str] = None,
     
     fomc_dates = get_fomc_dates(int(start_date[:4]), int(end_date[:4]))
     
-    if yields is not None:
+    if len(yields) > 0:
         qe_shocks = construct_qe_shocks(yields, fomc_dates)
         qe_shocks.to_csv(output_path / "qe_shocks_daily.csv")
         generated_files.append("qe_shocks_daily.csv")
@@ -798,7 +741,7 @@ def main(output_dir: Optional[str] = None,
     logger.info("\n--- Step 4: Estimating Holdings Regressions ---")
     
     holdings_results = {}
-    if holdings is not None and qe_intensity is not None:
+    if len(holdings) > 0 and qe_intensity is not None:
         for holder_type in ['total', 'official', 'private']:
             try:
                 result = estimate_holdings_regression(
@@ -824,7 +767,7 @@ def main(output_dir: Optional[str] = None,
     # -------------------------------------------------------------------------
     logger.info("\n--- Step 5: Estimating FX Local Projections ---")
     
-    if fx is not None and monthly_shocks is not None:
+    if len(fx) > 0 and monthly_shocks is not None:
         # Resample FX to monthly for alignment with shocks
         fx_monthly = fx.resample('ME').last()
         
