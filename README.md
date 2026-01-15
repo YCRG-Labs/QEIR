@@ -1,7 +1,7 @@
 
 Code associated with:
 
-## When the Fed Buys, Foreign Central Banks Sell: Cross-Border Portfolio Effects of U.S. Quantitative Easing
+## State-Dependent Financial Market Responses to Balance Sheet Policy Announcements
 
 #### Brandon Yee<sup>1</sup>, Krishna Sharma<sup>2</sup>
 <sup>1</sup> Yee Collins Research Group; 06883, CT USA  
