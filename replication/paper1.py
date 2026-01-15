@@ -1,23 +1,3 @@
-"""
-MAIN REPLICATION SCRIPT: Fiscal Thresholds and QE Effectiveness
-================================================================
-
-This script produces the main results reported in Table 2 of the paper.
-All results are fully reproducible using publicly available FRED data.
-
-Requirements:
-    pip install pandas numpy fredapi statsmodels python-dotenv
-
-Setup:
-    1. Get a free FRED API key from https://fred.stlouisfed.org/docs/api/api_key.html
-    2. Create a .env file with: FRED_API_KEY=your_key_here
-
-Output:
-    - Table 2 regression results
-    - Summary statistics
-    - Robustness checks
-"""
-
 import numpy as np
 import pandas as pd
 from fredapi import Fred
